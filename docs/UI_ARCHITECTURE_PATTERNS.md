@@ -8,6 +8,179 @@ This document captures the UI architecture patterns from HumanLayer's CodeLayer 
 
 ---
 
+## PMSynapse Architectural Decision: Rust Backend (Differs from HumanLayer)
+
+### Why Rust Instead of Go
+
+HumanLayer uses **Go** for their HLD daemon. PMSynapse will use **Rust** for a critical reason:
+
+**Rust compiles to WebAssembly (WASM)**, enabling the same backend logic to run:
+- **Native desktop** (via Tauri)
+- **Native browser** (via WASM)
+
+### The Multi-Platform Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     SHARED RUST CORE                             │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  pmsynapse-core (Rust library)                          │    │
+│  │  ├── Agent orchestration                                │    │
+│  │  ├── Task/Thought state management                      │    │
+│  │  ├── Event bus (pub/sub)                                │    │
+│  │  ├── SQLite persistence (via sql.js in WASM)            │    │
+│  │  └── 12-factor agent implementation                     │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                          │                                       │
+│            ┌─────────────┴─────────────┐                        │
+│            │                           │                        │
+│            ▼                           ▼                        │
+│  ┌─────────────────────┐    ┌─────────────────────┐            │
+│  │  NATIVE (Tauri)     │    │  BROWSER (WASM)     │            │
+│  │                     │    │                     │            │
+│  │  - Desktop app      │    │  - Web app          │            │
+│  │  - File system      │    │  - IndexedDB        │            │
+│  │  - Unix sockets     │    │  - WebSockets       │            │
+│  │  - Native notifs    │    │  - Web notifs       │            │
+│  │  - System tray      │    │  - PWA support      │            │
+│  └─────────────────────┘    └─────────────────────┘            │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Benefits of Rust + WASM
+
+| Benefit | Description |
+|---------|-------------|
+| **Write once, run anywhere** | Same agent logic in desktop and browser |
+| **No server required** | Users can run entirely in browser (local-first) |
+| **Offline capable** | WASM + IndexedDB enables full offline mode |
+| **Performance** | Near-native speed in browser |
+| **Type safety** | Rust's guarantees in both environments |
+| **Single codebase** | One team maintains one implementation |
+
+### Go vs Rust for This Use Case
+
+| Aspect | Go | Rust |
+|--------|-----|------|
+| **WASM support** | Poor (large binaries, limited) | Excellent (first-class) |
+| **Browser runtime** | Not practical | Production-ready |
+| **Desktop native** | Requires separate binary | Tauri integration |
+| **Development speed** | Faster initially | Slower, but unified |
+| **Long-term maintenance** | Two codebases (web + desktop) | One codebase |
+
+### Platform-Specific Adapters
+
+```rust
+// Core trait - platform agnostic
+pub trait StorageBackend {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
+    async fn set(&self, key: &str, value: &[u8]) -> Result<()>;
+    async fn delete(&self, key: &str) -> Result<()>;
+}
+
+// Native implementation (Tauri)
+#[cfg(not(target_arch = "wasm32"))]
+pub struct NativeStorage {
+    db: rusqlite::Connection,
+}
+
+// WASM implementation (Browser)
+#[cfg(target_arch = "wasm32")]
+pub struct WasmStorage {
+    db: sql_js::Database,  // SQLite compiled to WASM
+}
+```
+
+### Conditional Compilation
+
+```rust
+// Shared core logic
+pub async fn create_task(task: Task) -> Result<Task> {
+    let storage = get_storage();  // Platform-specific
+    storage.set(&task.id, &task.serialize()?).await?;
+    event_bus::publish(Event::TaskCreated(task.clone())).await;
+    Ok(task)
+}
+
+// Platform-specific entry points
+#[cfg(not(target_arch = "wasm32"))]
+#[tauri::command]
+pub async fn create_task_command(task: Task) -> Result<Task, String> {
+    create_task(task).await.map_err(|e| e.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub async fn create_task_wasm(task: JsValue) -> Result<JsValue, JsValue> {
+    let task: Task = serde_wasm_bindgen::from_value(task)?;
+    let result = create_task(task).await?;
+    Ok(serde_wasm_bindgen::to_value(&result)?)
+}
+```
+
+### Project Structure for Dual-Target
+
+```
+pmsynapse/
+├── crates/
+│   ├── pmsynapse-core/       # Shared Rust library
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── agents/       # Agent orchestration
+│   │   │   ├── tasks/        # Task management
+│   │   │   ├── thoughts/     # Thoughts system
+│   │   │   ├── storage/      # Platform-agnostic trait
+│   │   │   └── events/       # Event bus
+│   │   └── Cargo.toml
+│   │
+│   ├── pmsynapse-native/     # Tauri-specific
+│   │   ├── src/
+│   │   │   ├── main.rs
+│   │   │   ├── commands.rs   # Tauri commands
+│   │   │   └── storage.rs    # Native SQLite
+│   │   └── Cargo.toml
+│   │
+│   └── pmsynapse-wasm/       # WASM-specific
+│       ├── src/
+│       │   ├── lib.rs
+│       │   └── storage.rs    # IndexedDB/sql.js
+│       └── Cargo.toml
+│
+├── apps/
+│   ├── desktop/              # Tauri + React app
+│   │   ├── src/              # React frontend
+│   │   └── src-tauri/        # Uses pmsynapse-native
+│   │
+│   └── web/                  # Web app (Vite + React)
+│       ├── src/              # Same React frontend
+│       └── wasm/             # Uses pmsynapse-wasm
+│
+└── Cargo.toml                # Workspace
+```
+
+### WASM-Compatible Dependencies
+
+| Need | Native (Tauri) | WASM (Browser) |
+|------|---------------|----------------|
+| **SQLite** | `rusqlite` | `sql.js` (SQLite in WASM) |
+| **HTTP** | `reqwest` | `gloo-net` / `web-sys` |
+| **Storage** | File system | IndexedDB |
+| **Sockets** | Unix/TCP | WebSocket |
+| **Async** | `tokio` | `wasm-bindgen-futures` |
+
+### Trade-offs Accepted
+
+| Trade-off | Impact | Mitigation |
+|-----------|--------|------------|
+| **Steeper learning curve** | Slower initial development | Long-term unified codebase |
+| **Longer compile times** | Developer experience | Incremental compilation, `cargo watch` |
+| **WASM binary size** | Initial load time | Code splitting, lazy loading |
+| **Limited WASM APIs** | Some features browser-only | Feature flags, graceful degradation |
+
+---
+
 ## Technology Stack
 
 ### Core Technologies
