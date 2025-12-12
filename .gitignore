@@ -68,3 +68,6 @@ apps/desktop/src-tauri/WixTools/
 .qwen
 .cursor
 .bmad-core
+
+# PMSynapse thoughts (symlinked, do not commit)
+thoughts/
