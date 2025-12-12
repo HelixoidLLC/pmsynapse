@@ -1,5 +1,10 @@
 # PMSynapse Core Features: End-to-End Project Management
 
+## Naming Convention
+
+> **Important**: The CLI tool uses `snps` as its command prefix (short for "Synapse").
+> Do NOT use "pms" as an abbreviation - use "SNPS" or "Synapse" for all short references.
+
 ## Overview
 
 PMSynapse is an AI-enabled, end-to-end project management system that guides users from **idea to implementation**. It combines:
@@ -228,7 +233,7 @@ Every piece of documentation exists in TWO forms that stay synchronized:
 
 ### Explicit Sync Mechanism
 
-Sync is **explicit** via `pms sync` command (not automatic):
+Sync is **explicit** via `snps sync` command (not automatic):
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -247,7 +252,7 @@ Sync is **explicit** via `pms sync` command (not automatic):
 │    │  Changes     │                           │                 │
 │    └──────────────┘                           │                 │
 │           │                                    │                 │
-│           │ User: `pms sync`                  │                 │
+│           │ User: `snps sync`                 │                 │
 │           ▼                                    ▼                 │
 │    ┌─────────────────────────────────────────────────────┐     │
 │    │                 SYNC PREVIEW                         │     │
@@ -269,13 +274,13 @@ Sync is **explicit** via `pms sync` command (not automatic):
 ### CLI Commands
 
 ```bash
-pms sync              # Preview and apply changes
-pms sync --dry-run    # Preview only
-pms sync --force      # Apply without preview
-pms sync --file X.md  # Sync specific file
-pms diff              # Show pending changes
-pms graph export      # Export graph to JSON
-pms graph query "..."  # Run Datalog query
+snps sync              # Preview and apply changes
+snps sync --dry-run    # Preview only
+snps sync --force      # Apply without preview
+snps sync --file X.md  # Sync specific file
+snps diff              # Show pending changes
+snps graph export      # Export graph to JSON
+snps graph query "..."  # Run Datalog query
 ```
 
 ---
@@ -351,12 +356,12 @@ struct GraphChange {
 ### CLI Commands
 
 ```bash
-pms proposals                    # List pending proposals
-pms proposals --agent X          # Filter by agent
-pms proposals approve <id>       # Approve one
-pms proposals approve --all-high # Approve all ≥80% confidence
-pms proposals reject <id> -m "reason"
-pms proposals auto-approve --threshold 0.9  # Set auto-approve rule
+snps proposals                    # List pending proposals
+snps proposals --agent X          # Filter by agent
+snps proposals approve <id>       # Approve one
+snps proposals approve --all-high # Approve all ≥80% confidence
+snps proposals reject <id> -m "reason"
+snps proposals auto-approve --threshold 0.9  # Set auto-approve rule
 ```
 
 ### Auto-Approval Rules (Optional)
@@ -450,15 +455,15 @@ When PMSynapse is installed on an existing codebase, it runs a 4-phase analysis:
 ### CLI Commands for Legacy Analysis
 
 ```bash
-pms init                     # Initialize on existing codebase
-pms analyze                  # Run full analysis
-pms analyze --quick          # Fast scan, fewer assumptions
-pms analyze --deep           # Deep analysis, more AI inference
-pms assumptions              # List all assumptions
-pms assumptions --unconfirmed # Show only unconfirmed
-pms confirm <id>             # Confirm an assumption
-pms deny <id> --correct "actual value"  # Deny and correct
-pms questions                # Show questions needing answers
+snps init                     # Initialize on existing codebase
+snps analyze                  # Run full analysis
+snps analyze --quick          # Fast scan, fewer assumptions
+snps analyze --deep           # Deep analysis, more AI inference
+snps assumptions              # List all assumptions
+snps assumptions --unconfirmed # Show only unconfirmed
+snps confirm <id>             # Confirm an assumption
+snps deny <id> --correct "actual value"  # Deny and correct
+snps questions                # Show questions needing answers
 ```
 
 ---
@@ -825,17 +830,17 @@ custom_agents:
 ### CLI Commands for Templates
 
 ```bash
-pms templates list              # List available templates
-pms templates use bmad          # Switch to BMAD method
-pms templates use custom/my-team # Use custom template
-pms templates create my-new     # Create new template from current
-pms templates export            # Export current config
-pms templates validate          # Validate template syntax
+snps templates list              # List available templates
+snps templates use bmad          # Switch to BMAD method
+snps templates use custom/my-team # Use custom template
+snps templates create my-new     # Create new template from current
+snps templates export            # Export current config
+snps templates validate          # Validate template syntax
 
-pms workflow list               # List available workflows
-pms workflow run new-feature    # Start a workflow
-pms workflow status             # Show current workflow progress
-pms workflow skip <phase>       # Skip a phase (with confirmation)
+snps workflow list               # List available workflows
+snps workflow run new-feature    # Start a workflow
+snps workflow status             # Show current workflow progress
+snps workflow skip <phase>       # Skip a phase (with confirmation)
 ```
 
 ---
@@ -846,7 +851,7 @@ pms workflow skip <phase>       # Skip a phase (with confirmation)
 |----------|--------|-----------|
 | **Graph Database** | CozoDB unified | Single DB for graph + vector, WASM support |
 | **Assumption confidence** | 0.0-1.0 probability | Users see AI guessing level + evidence |
-| **Doc ↔ Graph sync** | Explicit `pms sync` | Prevents noise, user controls timing |
+| **Doc ↔ Graph sync** | Explicit `snps sync` | Prevents noise, user controls timing |
 | **Agent changes** | Proposal → Approval | Audit trail, human oversight, batch ops |
 | **LLM integration** | OpenRouter-style multi-provider | Flexibility, fallback, cost control |
 | **Conversational rules** | Template-based (BMAD default) | Team customization, methodology flexibility |
