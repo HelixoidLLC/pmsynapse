@@ -357,3 +357,6 @@ Key docs in `docs/`:
 - `PMSYNAPSE_CORE_FEATURES.md` - Feature overview
 - `12_FACTOR_AGENTS_DESIGN.md` - Agent architecture patterns
 - `AI_TEAM_COORDINATION_PATTERNS.md` - Multi-agent patterns
+
+## Linear
+When asked to fetch a Linear ticket, use the globally installed Linear CLI: `linear get-issue ENG-XXXX > thoughts/shared/tickets/eng-XXXX.md`
