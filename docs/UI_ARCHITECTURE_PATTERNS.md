@@ -10,6 +10,16 @@ This document captures the UI architecture patterns from HumanLayer's CodeLayer 
 
 ## PMSynapse Architectural Decision: Rust Backend (Differs from HumanLayer)
 
+> **📋 Implementation Roadmap**
+>
+> | Phase | Focus | Timeline |
+> |-------|-------|----------|
+> | **Phase 1 (Current)** | CLI tools in Rust | Now |
+> | **Phase 2** | Desktop app (Tauri + React) | Future |
+> | **Phase 3** | Browser app (WASM compilation) | Future |
+>
+> We start with CLI tools to establish the core Rust library (`pmsynapse-core`). The same codebase will later compile to WASM for browser deployment, but this is a future goal. Building CLI-first ensures the core logic is solid before adding UI complexity.
+
 ### Why Rust Instead of Go
 
 HumanLayer uses **Go** for their HLD daemon. PMSynapse will use **Rust** for a critical reason:
