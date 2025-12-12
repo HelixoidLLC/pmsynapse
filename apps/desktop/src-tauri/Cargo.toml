@@ -14,7 +14,7 @@ tauri-build = { workspace = true, features = [] }
 
 [dependencies]
 # Core library
-snps-core = { path = "../../../crates/snps-core" }
+snps-core = { path = "../../../engine/snps-core" }
 
 # Tauri
 tauri = { workspace = true, features = [] }

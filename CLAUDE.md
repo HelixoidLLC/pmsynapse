@@ -12,29 +12,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Structure
 
+Following BAML's pattern of isolating Rust code in an `engine/` directory:
+
 ```
 pmsynapse/
-├── crates/
-│   ├── snps-core/      # Core Rust library (graph, LLM, IDLC)
-│   └── snps-cli/       # CLI tool (`snps` binary)
+├── engine/                 # All Rust crates (BAML-style organization)
+│   ├── Cargo.toml          # Engine workspace config
+│   ├── snps-core/          # Core Rust library (graph, LLM, IDLC)
+│   │   ├── src/
+│   │   └── tests/          # Integration tests
+│   └── snps-cli/           # CLI tool (`snps` binary)
+│       ├── src/
+│       └── tests/          # CLI integration tests
 ├── apps/
-│   └── desktop/        # Tauri desktop app
-│       ├── src/        # React frontend
-│       └── src-tauri/  # Tauri backend (Rust)
-└── docs/               # Architecture & planning docs
+│   ├── desktop/            # Tauri desktop app
+│   │   ├── src/            # React frontend
+│   │   └── src-tauri/      # Tauri backend (Rust)
+│   └── vscode-ext/         # VS Code extension (planned)
+├── packages/               # Shared TypeScript packages
+│   └── rpc/                # Shared RPC types
+├── integ-tests/            # Cross-component integration tests
+│   ├── fixtures/           # Test data and configurations
+│   └── README.md           # Test documentation
+├── docs/                   # Architecture & planning docs
+├── Cargo.toml              # Root workspace (includes engine + apps)
+└── package.json            # Root monorepo config
 ```
 
 ## Build Commands
 
-### Rust (Core + CLI)
+### Rust (Engine)
 ```bash
 # Build all Rust crates
 cargo build
+
+# Build engine crates only
+cargo build -p snps-core -p snps-cli
 
 # Run tests with nextest
 pnpm test:rust
 # or directly:
 cargo nextest run --all-features
+
+# Run integration tests
+cargo test --test '*'
 
 # Lint and format
 pnpm lint:rust
@@ -47,6 +68,8 @@ cargo run -p snps-cli -- <command>
 # Example:
 cargo run -p snps-cli -- init
 cargo run -p snps-cli -- status
+cargo run -p snps-cli -- daemon status
+cargo run -p snps-cli -- thoughts list
 ```
 
 ### Desktop App (Tauri + React)
@@ -72,6 +95,23 @@ pnpm typecheck     # TypeScript type checking
 pnpm lint          # ESLint
 ```
 
+### Using snps CLI
+```bash
+# Start development environment (daemon + UI)
+snps dev
+
+# Start daemon only
+snps daemon start --foreground
+
+# Launch UI
+snps ui
+
+# Manage thoughts
+snps thoughts init
+snps thoughts new research "Topic"
+snps thoughts search "query"
+```
+
 ### Monorepo (Turbo)
 ```bash
 # Build everything
@@ -92,12 +132,16 @@ pnpm clean
 
 ## Architecture
 
-### Core Library (`snps-core`)
-Located in `crates/snps-core/src/`:
-- `lib.rs` - Main exports, error types, initialization
-- `graph/` - Knowledge graph implementation (SQLite MVP, CozoDB planned)
-- `llm/` - Multi-provider LLM integration (Anthropic, OpenAI, etc.)
-- `idlc/` - Idea Development Lifecycle workflow engine
+### Engine (`engine/`)
+
+All Rust code lives in the `engine/` directory following BAML's pattern:
+
+#### Core Library (`engine/snps-core`)
+- `src/lib.rs` - Main exports, error types, initialization
+- `src/graph.rs` - Knowledge graph implementation (SQLite MVP, CozoDB planned)
+- `src/llm.rs` - Multi-provider LLM integration (Anthropic, OpenAI, etc.)
+- `src/idlc.rs` - Idea Development Lifecycle workflow engine
+- `tests/` - Integration tests
 
 **Key patterns:**
 - Uses workspace dependencies defined in root `Cargo.toml`
@@ -105,33 +149,41 @@ Located in `crates/snps-core/src/`:
 - Async runtime: Tokio
 - Storage: rusqlite (CozoDB temporarily disabled due to dependency conflicts)
 
-### CLI (`snps-cli`)
-Located in `crates/snps-cli/src/main.rs`:
-- Built with clap (derive API)
-- Subcommands: `init`, `status`, `sync`, `analyze`, `proposals`, `templates`, `team`, `graph`
-- Uses colored for terminal output
-- Tracing for logging (controlled by `RUST_LOG` env var)
+#### CLI (`engine/snps-cli`)
+- `src/main.rs` - CLI implementation with clap
+- `tests/` - CLI integration tests using assert_cmd
 
-### Desktop App
-**Frontend** (`apps/desktop/src/`):
+**Commands:**
+- `init`, `status` - Project management
+- `daemon start|stop|status|restart|logs` - Daemon lifecycle
+- `ui`, `dev` - Launch UI and development mode
+- `thoughts init|new|search|list|sync` - Thoughts management
+- `graph`, `analyze`, `sync` - Knowledge graph operations
+- `proposals`, `templates`, `team` - Workflow management
+
+### Desktop App (`apps/desktop/`)
+
+**Frontend** (`src/`):
 - React 18 + TypeScript
 - Routing: react-router-dom
 - State management: Zustand
 - UI: shadcn/ui components (Radix UI + Tailwind)
 - Build: Vite 6
 
-**Backend** (`apps/desktop/src-tauri/`):
+**Backend** (`src-tauri/`):
 - Tauri 2.0
 - Plugins: fs, shell, notification, clipboard-manager, log, store
 - IPC commands defined in `src/lib.rs`
 
 ### IDLC (Idea Development Lifecycle)
+
 PMSynapse's core concept: configurable per-team workflows. See `docs/IDLC_CONFIGURATION.md` for details.
 - Teams define custom stages/statuses in `.pmsynapse/teams/<team-id>/idlc.yaml`
 - Default stages: triage → backlog → research → planning → development → validation → delivery → completed
 - Integrates with Linear, GitHub, and knowledge graph
 
 ### Knowledge Graph
+
 Tracks relationships between:
 - Issues, Tasks, Features
 - Research, Questions, Findings
@@ -140,42 +192,106 @@ Tracks relationships between:
 
 Currently uses SQLite (rusqlite). CozoDB (graph + vector DB) planned once dependency issues resolved.
 
+## Testing Structure
+
+Following BAML's test organization pattern:
+
+```
+# Unit tests - inline with source code
+engine/snps-core/src/graph.rs
+  └── #[cfg(test)] mod tests { ... }
+
+# Integration tests - separate directory
+engine/snps-core/tests/
+  ├── graph_tests.rs
+  └── idlc_tests.rs
+
+# CLI integration tests
+engine/snps-cli/tests/
+  └── cli_tests.rs
+
+# Cross-component tests
+integ-tests/
+  ├── fixtures/
+  └── README.md
+```
+
+### Running Tests
+
+```bash
+# All tests
+cargo test
+
+# Specific crate
+cargo test -p snps-core
+cargo test -p snps-cli
+
+# Integration tests only
+cargo test --test '*'
+
+# With nextest (faster)
+cargo nextest run
+
+# Snapshot tests
+cargo insta review
+```
+
 ## Development Workflow
 
+### Thoughts System
+
+PMSynapse includes a thoughts management system for research and planning:
+
+```bash
+# Initialize thoughts for project
+snps thoughts init
+
+# Create documents
+snps thoughts new research "Topic Name"
+snps thoughts new plan "Feature Plan"
+snps thoughts new ticket "PROJ-123"
+
+# Search and list
+snps thoughts search "query" --paths-only
+snps thoughts list --recent 10
+```
+
+See `docs/THOUGHTS_SYSTEM.md` and `docs/THOUGHTS_WORKFLOW_TUTORIAL.md` for details.
+
 ### Linear Integration
+
 This project uses Linear for issue tracking with MCP integration:
 - Linear MCP server can be configured in Claude Code settings
 - Status mapping defined in `docs/PROJECT_WORKFLOW.md`
 - CLI commands: `snps linear sync`, `snps linear push`, `snps linear pull`
 
-### Testing
-- Rust tests: `cargo test` or `pnpm test:rust` (uses nextest)
-- Snapshot tests: Uses `insta` crate for snapshot testing
-- Frontend tests: Vitest (`pnpm test` in desktop dir)
-
 ### Logging
+
 - Rust: Set `RUST_LOG=debug` for verbose output
 - CLI: Use `--verbose` or `-v` flag
 
 ## Important Notes
 
+### Engine Directory (BAML Pattern)
+
+The `engine/` directory contains all Rust crates, following BAML's organizational pattern:
+- Isolates Rust code from TypeScript/frontend code
+- Has its own `Cargo.toml` workspace config
+- Root `Cargo.toml` includes both engine crates and apps
+
 ### WASM Support (Removed)
-WASM support was removed to unblock Rust dependency issues (see commit 97a2b91). If needed in future, it can be re-added in `crates/snps-wasm/`.
+
+WASM support was removed to unblock Rust dependency issues. If needed in future, it can be re-added in `engine/snps-wasm/`.
 
 ### Database Migration
-Currently using rusqlite for MVP. CozoDB (graph + vector database) is planned but temporarily disabled due to dependency conflicts in workspace. When ready:
-1. Re-enable `cozo` in workspace dependencies
-2. Update `snps-core/Cargo.toml`
-3. Implement graph storage in `crates/snps-core/src/graph/`
 
-### Module Naming Convention
-Recent refactor (commit 0990fc9) moved to modern Rust naming:
-- Use `mod.rs` for module definitions
-- Separate `graph.rs` → `graph/mod.rs`
-- Separate `llm.rs` → `llm/mod.rs`
-- Separate `idlc.rs` → `idlc/mod.rs`
+Currently using rusqlite for MVP. CozoDB (graph + vector database) is planned but temporarily disabled due to dependency conflicts. When ready:
+1. Re-enable `cozo` in workspace dependencies
+2. Update `engine/snps-core/Cargo.toml`
+3. Implement graph storage in `engine/snps-core/src/graph.rs`
 
 ### Cross-Platform Builds
+
 CI/CD configured for:
 - Linux (ubuntu-latest)
 - macOS (macos-latest)
@@ -185,6 +301,8 @@ Desktop app requires platform-specific dependencies (WebKit on Linux).
 
 ## Configuration Files
 
+- `Cargo.toml` - Root workspace config
+- `engine/Cargo.toml` - Engine workspace config
 - `rust-toolchain.toml` - Rust version pinning (edition 2021)
 - `turbo.json` - Turborepo task orchestration
 - `pnpm-workspace.yaml` - pnpm workspace config
@@ -194,9 +312,11 @@ Desktop app requires platform-specific dependencies (WebKit on Linux).
 ## Documentation
 
 Key docs in `docs/`:
+- `STARTUP_GUIDE.md` - How to run daemon and UI
+- `THOUGHTS_SYSTEM.md` - Thoughts management documentation
+- `THOUGHTS_WORKFLOW_TUTORIAL.md` - When and how to use thoughts
 - `IDLC_CONFIGURATION.md` - Workflow configuration system
 - `PROJECT_WORKFLOW.md` - Default workflow + Linear integration
 - `PMSYNAPSE_CORE_FEATURES.md` - Feature overview
 - `12_FACTOR_AGENTS_DESIGN.md` - Agent architecture patterns
 - `AI_TEAM_COORDINATION_PATTERNS.md` - Multi-agent patterns
-- `SEED_PLAN.md` - Original repository seeding plan

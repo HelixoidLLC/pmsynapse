@@ -1,22 +1,23 @@
-# PMSynapse Root Workspace
+# PMSynapse Engine Workspace
 #
-# This workspace ties together the engine crates and application crates.
-# Engine crates (core library, CLI, daemon) live in engine/
-# Application crates (desktop Tauri backend) live in apps/
+# This workspace contains all Rust crates for the PMSynapse engine.
+# Following BAML's pattern of isolating Rust code in a dedicated directory.
 
 [workspace]
 resolver = "2"
 members = [
-    # Engine crates
-    "engine/snps-core",
-    "engine/snps-cli",
-    # Application crates
-    "apps/desktop/src-tauri",
+    "snps-core",
+    "snps-cli",
+    # Future crates:
+    # "snps-daemon",
+    # "snps-graph",
+    # "snps-llm",
+    # "snps-idlc",
 ]
 
 default-members = [
-    "engine/snps-core",
-    "engine/snps-cli",
+    "snps-core",
+    "snps-cli",
 ]
 
 [workspace.package]
@@ -29,7 +30,7 @@ description = "AI-enabled end-to-end project management system"
 
 [workspace.dependencies]
 # Internal crates
-snps-core = { path = "engine/snps-core" }
+snps-core = { path = "snps-core" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -64,16 +65,6 @@ hostname = "0.4"
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Tauri
-tauri = "2"
-tauri-build = "2"
-tauri-plugin-fs = "2"
-tauri-plugin-shell = "2"
-tauri-plugin-clipboard-manager = "2"
-tauri-plugin-notification = "2"
-tauri-plugin-log = "2"
-tauri-plugin-store = "2"
 
 # Testing
 insta = { version = "1", features = ["yaml"] }
