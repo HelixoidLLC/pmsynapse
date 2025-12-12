@@ -5,6 +5,7 @@
 //! - LLM integration (multi-provider)
 //! - IDLC (Idea Development Lifecycle) workflow
 
+pub mod claude;
 pub mod graph;
 pub mod idlc;
 pub mod llm;

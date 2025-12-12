@@ -4,6 +4,7 @@
 
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
+use snps_core::claude::{SessionAnalyzer, SessionExporter, SessionParser};
 use std::path::{Path, PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -126,6 +127,12 @@ enum Commands {
         /// Custom HTTP port for daemon
         #[arg(long)]
         port: Option<u16>,
+    },
+
+    /// Manage Claude Code sessions
+    Claude {
+        #[command(subcommand)]
+        action: ClaudeCommands,
     },
 }
 
@@ -434,6 +441,108 @@ enum TeamCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum ClaudeCommands {
+    /// Parse and display a Claude Code session
+    Parse {
+        /// Path to session JSONL file
+        file: String,
+
+        /// Output format
+        #[arg(long, short, value_enum, default_value = "json")]
+        format: ClaudeExportFormat,
+
+        /// Output file (defaults to stdout)
+        #[arg(long, short)]
+        output: Option<String>,
+
+        /// Pretty print JSON output
+        #[arg(long)]
+        pretty: bool,
+
+        /// Save to thoughts/shared/sessions/ directory
+        #[arg(long)]
+        save: bool,
+    },
+
+    /// List Claude Code sessions
+    List {
+        /// Directory to search (defaults to ~/.claude/projects)
+        #[arg(long, short)]
+        dir: Option<String>,
+
+        /// Show most recent N sessions
+        #[arg(long, default_value = "10")]
+        recent: usize,
+
+        /// Filter by project path
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Output format: table, json, paths
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
+
+    /// Analyze session hierarchy and statistics
+    Analyze {
+        /// Directory to analyze (session directory)
+        dir: String,
+
+        /// Show full message tree
+        #[arg(long)]
+        tree: bool,
+
+        /// Export analysis to file
+        #[arg(long, short)]
+        output: Option<String>,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "json")]
+        format: ClaudeExportFormat,
+    },
+
+    /// Display session message tree
+    Tree {
+        /// Path to session JSONL file
+        file: String,
+
+        /// Maximum depth to display
+        #[arg(long, default_value = "10")]
+        depth: usize,
+
+        /// Show tool calls inline
+        #[arg(long)]
+        tools: bool,
+    },
+
+    /// Import all sessions from Claude projects directory to thoughts
+    Import {
+        /// Claude projects directory
+        #[arg(long, default_value = "~/.claude/projects")]
+        claude_dir: String,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "markdown")]
+        format: ClaudeExportFormat,
+
+        /// Only import main sessions (skip agents)
+        #[arg(long)]
+        main_only: bool,
+
+        /// Project filter (only import sessions matching this project name)
+        #[arg(long)]
+        project: Option<String>,
+    },
+}
+
+#[derive(Clone, ValueEnum)]
+enum ClaudeExportFormat {
+    Json,
+    Markdown,
+    Md,
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
@@ -483,6 +592,7 @@ fn main() -> anyhow::Result<()> {
             ui_only,
             port,
         } => cmd_dev(profile, daemon_only, ui_only, port),
+        Commands::Claude { action } => cmd_claude(action),
     }
 }
 
@@ -2278,4 +2388,706 @@ fn generate_journal_template(date: &str) -> String {
 "#,
         date
     )
+}
+
+// =============================================================================
+// Claude Commands
+// =============================================================================
+
+fn cmd_claude(action: ClaudeCommands) -> anyhow::Result<()> {
+    match action {
+        ClaudeCommands::Parse {
+            file,
+            format,
+            output,
+            pretty,
+            save,
+        } => cmd_claude_parse(file, format, output, pretty, save),
+
+        ClaudeCommands::List {
+            dir,
+            recent,
+            project,
+            format,
+        } => cmd_claude_list(dir, recent, project, format),
+
+        ClaudeCommands::Analyze {
+            dir,
+            tree,
+            output,
+            format,
+        } => cmd_claude_analyze(dir, tree, output, format),
+
+        ClaudeCommands::Tree { file, depth, tools } => cmd_claude_tree(file, depth, tools),
+
+        ClaudeCommands::Import {
+            claude_dir,
+            format,
+            main_only,
+            project,
+        } => cmd_claude_import(claude_dir, format, main_only, project),
+    }
+}
+
+fn get_claude_sessions_dir() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    home.join(".claude").join("projects")
+}
+
+fn expand_path(path: &str) -> PathBuf {
+    let expanded = shellexpand::tilde(path);
+    PathBuf::from(expanded.as_ref())
+}
+
+fn cmd_claude_parse(
+    file: String,
+    format: ClaudeExportFormat,
+    output: Option<String>,
+    pretty: bool,
+    save: bool,
+) -> anyhow::Result<()> {
+    let file_path = expand_path(&file);
+
+    if !file_path.exists() {
+        println!(
+            "{}",
+            format!("Session file not found: {}", file_path.display()).red()
+        );
+        return Ok(());
+    }
+
+    println!(
+        "{}",
+        format!("Parsing session: {}", file_path.display()).bright_blue()
+    );
+
+    let project_dir = file_path
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let parser = SessionParser::new(project_dir.clone());
+    let session = parser
+        .parse_file(&file_path)
+        .map_err(|e| anyhow::anyhow!("Failed to parse session: {}", e))?;
+
+    let analyzer = SessionAnalyzer::new(project_dir);
+    let stats = analyzer.analyze_session(&session);
+
+    let exporter = SessionExporter::new();
+
+    let result = match format {
+        ClaudeExportFormat::Json => exporter
+            .export_json_string(&session, &stats, pretty)
+            .map_err(|e| anyhow::anyhow!("Export failed: {}", e))?,
+        ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
+            exporter.export_markdown_string(&session, &stats)
+        }
+    };
+
+    // Save to thoughts directory if requested
+    if save {
+        let thoughts_dir = PathBuf::from("thoughts/shared/sessions");
+        std::fs::create_dir_all(&thoughts_dir)?;
+
+        let extension = match format {
+            ClaudeExportFormat::Json => "json",
+            ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => "md",
+        };
+
+        // Create a filename from session ID (first 8 chars)
+        let short_id = if session.session_id.len() >= 8 {
+            &session.session_id[..8]
+        } else {
+            &session.session_id
+        };
+        let session_filename = format!("session-{}.{}", short_id, extension);
+        let save_path = thoughts_dir.join(session_filename);
+
+        std::fs::write(&save_path, &result)?;
+        println!(
+            "{}",
+            format!("  ✓ Saved to: {}", save_path.display()).green()
+        );
+
+        // Try to run thoughts sync
+        println!("{}", "  Syncing thoughts...".dimmed());
+        let sync_result = std::process::Command::new("snps")
+            .args(["thoughts", "sync", "--no-commit"])
+            .output();
+
+        match sync_result {
+            Ok(output) if output.status.success() => {
+                println!("{}", "  ✓ Thoughts index updated".green());
+            }
+            _ => {
+                println!(
+                    "{}",
+                    "  ⚠ Could not auto-sync thoughts (run 'snps thoughts sync' manually)".yellow()
+                );
+            }
+        }
+    }
+
+    if let Some(out_path) = output {
+        let out_file = expand_path(&out_path);
+        std::fs::write(&out_file, &result)?;
+        println!(
+            "{}",
+            format!("✓ Exported to: {}", out_file.display()).green()
+        );
+    } else if !save {
+        // Only print to stdout if not saving (to avoid double output)
+        println!();
+        println!("{}", result);
+    }
+
+    Ok(())
+}
+
+fn cmd_claude_list(
+    dir: Option<String>,
+    recent: usize,
+    project: Option<String>,
+    format: String,
+) -> anyhow::Result<()> {
+    let search_dir = dir
+        .map(|d| expand_path(&d))
+        .unwrap_or_else(get_claude_sessions_dir);
+
+    if !search_dir.exists() {
+        println!(
+            "{}",
+            format!(
+                "Claude sessions directory not found: {}",
+                search_dir.display()
+            )
+            .yellow()
+        );
+        return Ok(());
+    }
+
+    println!(
+        "{}",
+        format!("Searching: {}", search_dir.display()).bright_blue()
+    );
+    println!();
+
+    // Find all JSONL files
+    let mut sessions: Vec<(PathBuf, std::time::SystemTime, Option<String>)> = Vec::new();
+
+    fn find_sessions(
+        dir: &Path,
+        sessions: &mut Vec<(PathBuf, std::time::SystemTime, Option<String>)>,
+        project_filter: &Option<String>,
+    ) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    find_sessions(&path, sessions, project_filter);
+                } else if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
+                    // Apply project filter
+                    if let Some(filter) = project_filter {
+                        if !path.to_string_lossy().contains(filter) {
+                            continue;
+                        }
+                    }
+
+                    if let Ok(meta) = path.metadata() {
+                        if let Ok(modified) = meta.modified() {
+                            // Try to extract project name from path
+                            let project_name = path
+                                .parent()
+                                .and_then(|p| p.file_name())
+                                .map(|n| n.to_string_lossy().to_string());
+                            sessions.push((path, modified, project_name));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    find_sessions(&search_dir, &mut sessions, &project);
+
+    // Sort by modification time (newest first)
+    sessions.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Apply recent limit
+    sessions.truncate(recent);
+
+    if sessions.is_empty() {
+        println!("{}", "No Claude Code sessions found.".dimmed());
+        return Ok(());
+    }
+
+    match format.as_str() {
+        "json" => {
+            let json_sessions: Vec<_> = sessions
+                .iter()
+                .map(|(path, _, project)| {
+                    serde_json::json!({
+                        "path": path.to_string_lossy(),
+                        "project": project
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&json_sessions)?);
+        }
+        "paths" => {
+            for (path, _, _) in &sessions {
+                println!("{}", path.display());
+            }
+        }
+        _ => {
+            println!(
+                "{}",
+                format!("Found {} sessions (showing {})", sessions.len(), recent).green()
+            );
+            println!();
+
+            for (path, modified, project) in &sessions {
+                let age = modified.elapsed().unwrap_or_default();
+                let age_str = if age.as_secs() < 3600 {
+                    format!("{}m ago", age.as_secs() / 60)
+                } else if age.as_secs() < 86400 {
+                    format!("{}h ago", age.as_secs() / 3600)
+                } else {
+                    format!("{}d ago", age.as_secs() / 86400)
+                };
+
+                let filename = path.file_name().unwrap_or_default().to_string_lossy();
+                let proj_str = project
+                    .as_ref()
+                    .map(|p| format!(" [{}]", p.bright_cyan()))
+                    .unwrap_or_default();
+
+                println!("  {} {}{}", filename, age_str.dimmed(), proj_str);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn cmd_claude_analyze(
+    dir: String,
+    tree: bool,
+    output: Option<String>,
+    format: ClaudeExportFormat,
+) -> anyhow::Result<()> {
+    let dir_path = expand_path(&dir);
+
+    if !dir_path.exists() {
+        println!(
+            "{}",
+            format!("Directory not found: {}", dir_path.display()).red()
+        );
+        return Ok(());
+    }
+
+    println!(
+        "{}",
+        format!("Analyzing sessions in: {}", dir_path.display()).bright_blue()
+    );
+    println!();
+
+    let analyzer = SessionAnalyzer::new(dir_path.to_string_lossy().to_string());
+    let hierarchy = analyzer
+        .analyze_directory(&dir_path)
+        .map_err(|e| anyhow::anyhow!("Analysis failed: {}", e))?;
+
+    // Print summary
+    println!("{}", "Session Hierarchy Summary".bright_blue());
+    println!();
+    println!("  Main sessions: {}", hierarchy.sessions.len());
+    println!(
+        "  Total sessions: {}",
+        hierarchy.sessions.len() + hierarchy.agents.len()
+    );
+
+    // Count agents
+    let agent_count = hierarchy.agents.len();
+    println!("  Agent sessions: {}", agent_count);
+    println!();
+
+    // Show tree if requested
+    if tree {
+        println!("{}", "Session Tree:".bright_blue());
+        println!();
+
+        for session in &hierarchy.sessions {
+            let exporter = SessionExporter::new();
+            let stats = analyzer.analyze_session(session);
+            let title = exporter.build_thread_data(session, &stats).title;
+
+            println!("  {} {}", "●".green(), title);
+            println!("    ID: {}", session.session_id.dimmed());
+            println!(
+                "    Messages: {}, Tools: {}",
+                stats.total_messages, stats.tool_calls
+            );
+
+            // Show child agents
+            for child_id in &session.child_agents {
+                // Find agent by ID
+                if let Some(child) = hierarchy.agents.iter().find(|a| {
+                    a.agent_id
+                        .as_ref()
+                        .map(|id| id == child_id)
+                        .unwrap_or(false)
+                }) {
+                    let child_stats = analyzer.analyze_session(child);
+                    println!("    {} Agent: {}", "├─".dimmed(), child_id.bright_cyan());
+                    println!(
+                        "    {}   Messages: {}, Tools: {}",
+                        "│".dimmed(),
+                        child_stats.total_messages,
+                        child_stats.tool_calls
+                    );
+                }
+            }
+            println!();
+        }
+    }
+
+    // Export if requested
+    if let Some(out_path) = output {
+        let out_file = expand_path(&out_path);
+
+        let result = match format {
+            ClaudeExportFormat::Json => serde_json::to_string_pretty(&hierarchy)?,
+            ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
+                let mut md = String::new();
+                md.push_str("# Claude Code Session Analysis\n\n");
+                md.push_str("## Summary\n\n");
+                md.push_str(&format!("- Main sessions: {}\n", hierarchy.sessions.len()));
+                md.push_str(&format!(
+                    "- Total sessions: {}\n",
+                    hierarchy.sessions.len() + hierarchy.agents.len()
+                ));
+                md.push_str(&format!("- Agent sessions: {}\n\n", agent_count));
+
+                md.push_str("## Sessions\n\n");
+                for session in &hierarchy.sessions {
+                    let stats = analyzer.analyze_session(session);
+                    md.push_str(&format!("### {}\n\n", session.session_id));
+                    md.push_str(&format!("- Is agent: {}\n", session.is_agent));
+                    md.push_str(&format!("- Messages: {}\n", stats.total_messages));
+                    md.push_str(&format!("- Tool calls: {}\n", stats.tool_calls));
+                    if !session.child_agents.is_empty() {
+                        md.push_str(&format!(
+                            "- Child agents: {}\n",
+                            session.child_agents.join(", ")
+                        ));
+                    }
+                    md.push('\n');
+                }
+
+                md.push_str("## Agents\n\n");
+                for agent in &hierarchy.agents {
+                    let stats = analyzer.analyze_session(agent);
+                    let agent_id = agent.agent_id.as_deref().unwrap_or("unknown");
+                    md.push_str(&format!("### {}\n\n", agent_id));
+                    md.push_str(&format!(
+                        "- Parent: {}\n",
+                        agent.parent_session_id.as_deref().unwrap_or("unknown")
+                    ));
+                    md.push_str(&format!("- Messages: {}\n", stats.total_messages));
+                    md.push_str(&format!("- Tool calls: {}\n\n", stats.tool_calls));
+                }
+                md
+            }
+        };
+
+        std::fs::write(&out_file, result)?;
+        println!(
+            "{}",
+            format!("✓ Analysis exported to: {}", out_file.display()).green()
+        );
+    }
+
+    Ok(())
+}
+
+fn cmd_claude_tree(file: String, depth: usize, tools: bool) -> anyhow::Result<()> {
+    let file_path = expand_path(&file);
+
+    if !file_path.exists() {
+        println!(
+            "{}",
+            format!("Session file not found: {}", file_path.display()).red()
+        );
+        return Ok(());
+    }
+
+    println!(
+        "{}",
+        format!("Message tree for: {}", file_path.display()).bright_blue()
+    );
+    println!();
+
+    let project_dir = file_path
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let parser = SessionParser::new(project_dir.clone());
+    let session = parser
+        .parse_file(&file_path)
+        .map_err(|e| anyhow::anyhow!("Failed to parse session: {}", e))?;
+
+    let analyzer = SessionAnalyzer::new(project_dir);
+    let stats = analyzer.analyze_session(&session);
+
+    // Build and display tree from messages directly
+    println!("{}", "Message Flow:".bright_blue());
+    println!();
+
+    let mut current_depth = 0;
+    for message in &session.messages {
+        if current_depth >= depth {
+            continue;
+        }
+
+        let indent = "  ".repeat(current_depth.min(depth));
+        let role_str = message
+            .role
+            .as_ref()
+            .map(|r| format!("{:?}", r))
+            .unwrap_or_else(|| "System".to_string());
+        let role_colored = match &message.role {
+            Some(snps_core::claude::MessageRole::User) => role_str.bright_green(),
+            Some(snps_core::claude::MessageRole::Assistant) => role_str.bright_blue(),
+            Some(snps_core::claude::MessageRole::System) => role_str.bright_yellow(),
+            None => role_str.dimmed(),
+        };
+
+        // Truncate content preview
+        let preview = message
+            .content
+            .text
+            .as_ref()
+            .map(|s| {
+                let first_line = s.lines().next().unwrap_or("");
+                let truncated: String = first_line.chars().take(60).collect();
+                if first_line.len() > 60 {
+                    format!("{}...", truncated)
+                } else {
+                    truncated
+                }
+            })
+            .unwrap_or_else(|| "(no content)".to_string());
+
+        println!("{}[{}] {}", indent, role_colored, preview);
+
+        if tools && !message.tool_uses.is_empty() {
+            let tool_names: Vec<_> = message
+                .tool_uses
+                .iter()
+                .map(|t| t.tool_name.as_str())
+                .collect();
+            println!("{}  Tools: {}", indent, tool_names.join(", ").dimmed());
+        }
+
+        current_depth += 1;
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!(
+            "Total: {} messages, {} tool calls",
+            stats.total_messages, stats.tool_calls
+        )
+        .dimmed()
+    );
+
+    Ok(())
+}
+
+fn cmd_claude_import(
+    claude_dir: String,
+    format: ClaudeExportFormat,
+    main_only: bool,
+    project_filter: Option<String>,
+) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        "Importing Claude Code sessions to thoughts...".bright_blue()
+    );
+    println!();
+
+    let dir_path = expand_path(&claude_dir);
+
+    if !dir_path.exists() {
+        println!(
+            "{}",
+            format!(
+                "Claude projects directory not found: {}",
+                dir_path.display()
+            )
+            .red()
+        );
+        return Ok(());
+    }
+
+    let thoughts_dir = PathBuf::from("thoughts/shared/sessions");
+    std::fs::create_dir_all(&thoughts_dir)?;
+
+    let exporter = SessionExporter::new();
+    let mut imported_count = 0;
+    let mut skipped_count = 0;
+
+    println!("  Scanning: {}", dir_path.display());
+
+    // Iterate over project directories
+    for project_entry in std::fs::read_dir(&dir_path)? {
+        let project_entry = project_entry?;
+        let project_path = project_entry.path();
+
+        if !project_path.is_dir() {
+            continue;
+        }
+
+        let project_name = project_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // Apply project filter
+        if let Some(ref filter) = project_filter {
+            if !project_name.contains(filter) {
+                continue;
+            }
+        }
+
+        // Analyze sessions in this project directory
+        let analyzer = SessionAnalyzer::new(project_path.to_string_lossy().to_string());
+
+        match analyzer.analyze_directory(&project_path) {
+            Ok(hierarchy) => {
+                // Process main sessions
+                for session in &hierarchy.sessions {
+                    let stats = analyzer.analyze_session(session);
+
+                    let extension = match format {
+                        ClaudeExportFormat::Json => "json",
+                        ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => "md",
+                    };
+
+                    let short_id = if session.session_id.len() >= 8 {
+                        &session.session_id[..8]
+                    } else {
+                        &session.session_id
+                    };
+
+                    let filename = format!("session-{}.{}", short_id, extension);
+                    let save_path = thoughts_dir.join(&filename);
+
+                    // Skip if already exists
+                    if save_path.exists() {
+                        skipped_count += 1;
+                        continue;
+                    }
+
+                    let content = match format {
+                        ClaudeExportFormat::Json => exporter
+                            .export_json_string(session, &stats, true)
+                            .unwrap_or_default(),
+                        ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
+                            exporter.export_markdown_string(session, &stats)
+                        }
+                    };
+
+                    std::fs::write(&save_path, content)?;
+                    imported_count += 1;
+                    println!("    {} {}", "✓".green(), filename);
+                }
+
+                // Process agents if not main_only
+                if !main_only {
+                    for agent in &hierarchy.agents {
+                        let stats = analyzer.analyze_session(agent);
+
+                        let agent_id = agent.agent_id.as_deref().unwrap_or("unknown");
+                        let short_id = if agent_id.len() >= 8 {
+                            &agent_id[..8]
+                        } else {
+                            agent_id
+                        };
+
+                        let extension = match format {
+                            ClaudeExportFormat::Json => "json",
+                            ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => "md",
+                        };
+
+                        let filename = format!("agent-{}.{}", short_id, extension);
+                        let save_path = thoughts_dir.join(&filename);
+
+                        // Skip if already exists
+                        if save_path.exists() {
+                            skipped_count += 1;
+                            continue;
+                        }
+
+                        let content = match format {
+                            ClaudeExportFormat::Json => exporter
+                                .export_json_string(agent, &stats, true)
+                                .unwrap_or_default(),
+                            ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
+                                exporter.export_markdown_string(agent, &stats)
+                            }
+                        };
+
+                        std::fs::write(&save_path, content)?;
+                        imported_count += 1;
+                        println!("    {} {} (agent)", "✓".green(), filename);
+                    }
+                }
+            }
+            Err(e) => {
+                println!(
+                    "    {} Failed to analyze {}: {}",
+                    "⚠".yellow(),
+                    project_name,
+                    e
+                );
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!(
+            "✓ Imported {} sessions ({} skipped)",
+            imported_count, skipped_count
+        )
+        .green()
+    );
+
+    // Try to run thoughts sync
+    if imported_count > 0 {
+        println!();
+        println!("{}", "Syncing thoughts...".dimmed());
+        let sync_result = std::process::Command::new("snps")
+            .args(["thoughts", "sync", "--no-commit"])
+            .output();
+
+        match sync_result {
+            Ok(output) if output.status.success() => {
+                println!("{}", "✓ Thoughts index updated".green());
+            }
+            _ => {
+                println!(
+                    "{}",
+                    "⚠ Could not auto-sync thoughts (run 'snps thoughts sync' manually)".yellow()
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
