@@ -27,6 +27,9 @@ colored = "2"
 indicatif = "0.17"
 dialoguer = "0.11"
 directories = "5"
+dirs = "5"
+chrono = "0.4"
+hostname = "0.4"
 
 [dev-dependencies]
 assert_cmd = "2"
