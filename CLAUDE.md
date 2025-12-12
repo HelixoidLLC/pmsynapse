@@ -84,6 +84,48 @@ This project uses SPARC (Specification, Pseudocode, Architecture, Refinement, Co
 - **Clean Architecture**: Separate concerns
 - **Documentation**: Keep updated
 
+## Rust Code Conventions
+
+### Module Naming (Modern Style)
+
+**Use named files instead of `mod.rs`:**
+
+```
+// ✅ CORRECT (Modern - Rust 2018+)
+crates/snps-core/src/
+├── lib.rs
+├── graph.rs      ← module code here
+├── llm.rs
+└── idlc.rs
+
+// ❌ AVOID (Classic - requires directories)
+crates/snps-core/src/
+├── lib.rs
+├── graph/
+│   └── mod.rs    ← harder to find in IDE
+├── llm/
+│   └── mod.rs
+└── idlc/
+    └── mod.rs
+```
+
+**Why:**
+- Named files are easier to find in IDE tabs and file search
+- No ambiguity when multiple "mod.rs" files are open
+- Cleaner directory structure for simple modules
+
+**When to use directories:**
+Only create a directory when a module has submodules:
+
+```
+src/
+├── lib.rs
+├── graph.rs              ← parent module
+└── graph/
+    ├── node.rs           ← graph::node submodule
+    └── edge.rs           ← graph::edge submodule
+```
+
 ## 🚀 Available Agents (54 Total)
 
 ### Core Development
