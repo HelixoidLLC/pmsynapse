@@ -309,6 +309,43 @@ Desktop app requires platform-specific dependencies (WebKit on Linux).
 - `.pmsynapse/config.yaml` - PMSynapse project config (created by `snps init`)
 - `.pmsynapse/teams/*/idlc.yaml` - Per-team workflow config
 
+## Claude Code Behavior Rules
+
+### Web Fetching Fallback
+
+When the `WebFetch` tool fails (404, timeout, or other errors), fallback to using `curl` via the Bash tool:
+
+```bash
+# Example fallback pattern
+curl -sL "https://raw.githubusercontent.com/owner/repo/branch/file.txt"
+
+# For JSON APIs
+curl -sL "https://api.github.com/repos/owner/repo/contents" | jq '.'
+
+# With headers (e.g., for GitHub API)
+curl -sL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/..."
+```
+
+**When to use curl fallback:**
+- WebFetch returns 404 or other HTTP errors
+- WebFetch times out
+- Need to access raw file content from GitHub
+- Need more control over HTTP headers
+
+### Pre-commit Testing
+
+All code changes must pass the pre-push hook before committing:
+
+```bash
+# Run manually before committing
+make check-test
+
+# This runs:
+# 1. cargo fmt --all -- --check
+# 2. cargo clippy -p snps-core -p snps-cli --all-targets -- -D warnings
+# 3. cargo test -p snps-core -p snps-cli --all-features
+```
+
 ## Documentation
 
 Key docs in `docs/`:
