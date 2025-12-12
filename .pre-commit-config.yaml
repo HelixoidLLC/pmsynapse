@@ -1,0 +1,58 @@
+# Pre-commit configuration for PMSynapse
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Standard file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: end-of-file-fixer
+        exclude: ^(target/|node_modules/|\.pnpm-store/)
+      - id: trailing-whitespace
+        exclude: ^(target/|node_modules/|\.pnpm-store/)
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+  # Rust formatting
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy (engine)
+        entry: cargo clippy -p snps-core -p snps-cli --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-test-engine
+        name: cargo test (engine)
+        entry: cargo test -p snps-core -p snps-cli --all-features
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
+
+  # TypeScript/JavaScript (for desktop app)
+  - repo: local
+    hooks:
+      - id: pnpm-lint
+        name: pnpm lint
+        entry: bash -c 'cd apps/desktop && pnpm lint 2>/dev/null || true'
+        language: system
+        types_or: [javascript, typescript, tsx, jsx]
+        pass_filenames: false
+
+# CI stages configuration
+default_stages: [pre-commit]

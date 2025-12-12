@@ -1,4 +1,5 @@
 .PHONY: all build test clean dev lint fmt check desktop cli install help engine
+.PHONY: check-test lint-engine githooks setup-ci check-local
 
 # Default target
 all: build
@@ -70,6 +71,10 @@ test-integ:
 lint:
 	cargo clippy --all-targets --all-features -- -D warnings
 
+# Run clippy on engine crates only (no GTK dependencies)
+lint-engine:
+	cargo clippy -p snps-core -p snps-cli --all-targets --all-features -- -D warnings
+
 # Format code
 fmt:
 	cargo fmt --all
@@ -96,13 +101,23 @@ dev:
 daemon:
 	cargo run -p snps-cli -- daemon start --foreground
 
-# Build desktop app
+# Build desktop app (requires GTK on Linux)
 desktop:
-	cd apps/desktop && pnpm tauri build
+	@if pkg-config --exists gtk+-3.0 2>/dev/null; then \
+		cd apps/desktop && pnpm tauri build; \
+	else \
+		echo "⚠️  GTK not found. Skipping desktop build."; \
+		echo "   Install GTK: sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev"; \
+	fi
 
-# Build desktop app for development
+# Build desktop app for development (requires GTK on Linux)
 desktop-dev:
-	cd apps/desktop && pnpm tauri dev
+	@if pkg-config --exists gtk+-3.0 2>/dev/null; then \
+		cd apps/desktop && pnpm tauri dev; \
+	else \
+		echo "⚠️  GTK not found. Skipping desktop dev."; \
+		echo "   Install GTK: sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev"; \
+	fi
 
 # Build CLI
 cli:
@@ -117,17 +132,45 @@ install:
 	pnpm install
 
 # Initial setup
-setup: install
-	@echo "PMSynapse setup complete!"
+setup: install githooks
+	@echo ""
+	@echo "✅ PMSynapse setup complete!"
 	@echo ""
 	@echo "Quick start:"
+	@echo "  make engine      - Build Rust engine"
+	@echo "  make test-engine - Run tests"
 	@echo "  make dev         - Start full development environment"
 	@echo "  make daemon      - Start daemon in foreground"
-	@echo "  make desktop-dev - Start desktop app in dev mode"
-	@echo "  make test        - Run all tests"
+	@echo "  make desktop-dev - Start desktop app in dev mode (requires GTK)"
 
-# Run all checks (for CI)
-ci: fmt-check lint test
+# Run all checks and tests (engine-safe, for pre-push)
+check-test: fmt-check lint-engine test-engine
+	@echo "✅ All checks and tests passed!"
+
+# Run all checks (for CI - engine only to avoid GTK issues)
+ci: fmt-check lint-engine test-engine
+	@echo "✅ CI checks passed!"
+
+# CI setup
+setup-ci:
+	@echo "Setting up CI environment..."
+	rustup component add clippy rustfmt
+
+# Install git hooks
+githooks:
+	@echo "Installing git hooks..."
+	@mkdir -p .git/hooks
+	@cp scripts/pre-push .git/hooks/pre-push
+	@chmod +x .git/hooks/pre-push
+	@echo "✅ Git hooks installed!"
+	@echo "   Pre-push hook will run: make check-test"
+
+# Check for local branches (block pushing)
+check-local:
+	@if git rev-parse --abbrev-ref HEAD | grep -q "^local/"; then \
+		echo "❌ Cannot push local/* branches"; \
+		exit 1; \
+	fi
 
 # Documentation
 docs:

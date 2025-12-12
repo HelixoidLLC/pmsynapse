@@ -6,6 +6,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::tempdir;
 
+#[allow(deprecated)]
 fn snps_cmd() -> Command {
     Command::cargo_bin("snps").unwrap()
 }

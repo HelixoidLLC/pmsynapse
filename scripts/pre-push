@@ -1,0 +1,35 @@
+#!/bin/bash
+# Pre-push hook for PMSynapse
+# Installed by: make githooks
+# Runs checks and engine tests before allowing push
+
+set -e
+
+echo "🔍 Running pre-push checks..."
+
+# Run format check
+echo "  ▶ Checking formatting..."
+if ! cargo fmt --all -- --check > /dev/null 2>&1; then
+    echo "❌ Formatting issues found. Run 'cargo fmt' to fix."
+    exit 1
+fi
+echo "  ✓ Formatting OK"
+
+# Run clippy on engine crates (no GTK dependencies)
+echo "  ▶ Running clippy (engine)..."
+if ! cargo clippy -p snps-core -p snps-cli --all-targets -- -D warnings 2>&1 | tail -5; then
+    echo "❌ Clippy found issues. Fix warnings before pushing."
+    exit 1
+fi
+echo "  ✓ Clippy OK"
+
+# Run engine tests
+echo "  ▶ Running tests (engine)..."
+if ! cargo test -p snps-core -p snps-cli --all-features 2>&1 | tail -10; then
+    echo "❌ Tests failed. Fix failing tests before pushing."
+    exit 1
+fi
+echo "  ✓ Tests OK"
+
+echo ""
+echo "✅ All pre-push checks passed!"

@@ -548,10 +548,7 @@ fn cmd_status() -> anyhow::Result<()> {
     // Check initialization
     let config_path = std::path::Path::new(".pmsynapse");
     if !config_path.exists() {
-        println!(
-            "{}",
-            "  Not initialized. Run 'snps init' first.".yellow()
-        );
+        println!("{}", "  Not initialized. Run 'snps init' first.".yellow());
         return Ok(());
     }
 
@@ -638,7 +635,10 @@ fn cmd_templates(action: Option<TemplateCommands>) -> anyhow::Result<()> {
             println!("  • custom");
         }
         Some(TemplateCommands::Use { name }) => {
-            println!("{}", format!("Switching to template: {}", name).bright_green());
+            println!(
+                "{}",
+                format!("Switching to template: {}", name).bright_green()
+            );
             // TODO: Implement template switching
         }
         Some(TemplateCommands::Validate) => {
@@ -688,7 +688,10 @@ fn cmd_graph(query: Option<String>, export: Option<String>) -> anyhow::Result<()
         // TODO: Execute query
         println!("{}", "  (no results)".dimmed());
     } else if let Some(path) = export {
-        println!("{}", format!("Exporting graph to {}...", path).bright_blue());
+        println!(
+            "{}",
+            format!("Exporting graph to {}...", path).bright_blue()
+        );
         // TODO: Export graph
         println!("{}", "  ✓ Export complete".green());
     } else {
@@ -754,9 +757,7 @@ fn is_daemon_running(profile: Option<&str>) -> bool {
             #[cfg(unix)]
             {
                 use std::process::Command;
-                let output = Command::new("kill")
-                    .args(["-0", &pid.to_string()])
-                    .output();
+                let output = Command::new("kill").args(["-0", &pid.to_string()]).output();
                 return output.map(|o| o.status.success()).unwrap_or(false);
             }
             #[cfg(windows)]
@@ -816,7 +817,9 @@ fn daemon_start(
             "{}",
             format!(
                 "Daemon already running{}",
-                profile_ref.map(|p| format!(" (profile: {})", p)).unwrap_or_default()
+                profile_ref
+                    .map(|p| format!(" (profile: {})", p))
+                    .unwrap_or_default()
             )
             .yellow()
         );
@@ -841,7 +844,14 @@ fn daemon_start(
 
     println!("  Socket:   {}", socket_path.display());
     println!("  Database: {}", db_path.display());
-    println!("  HTTP:     {}", if port > 0 { format!("http://127.0.0.1:{}", port) } else { "disabled".to_string() });
+    println!(
+        "  HTTP:     {}",
+        if port > 0 {
+            format!("http://127.0.0.1:{}", port)
+        } else {
+            "disabled".to_string()
+        }
+    );
     if let Some(p) = &profile {
         println!("  Profile:  {}", p.bright_cyan());
     }
@@ -853,7 +863,10 @@ fn daemon_start(
 
         // In foreground mode, we would run the actual daemon here
         // For now, simulate with a placeholder
-        println!("{}", "⚠ Daemon not yet implemented - this is a placeholder".yellow());
+        println!(
+            "{}",
+            "⚠ Daemon not yet implemented - this is a placeholder".yellow()
+        );
         println!();
         println!("The daemon will provide:");
         println!("  • REST API for knowledge graph operations");
@@ -884,7 +897,7 @@ fn daemon_start(
         // Create placeholder PID file for testing
         // std::fs::write(&pid_path, std::process::id().to_string())?;
 
-        println!("{}", "When implemented, daemon will:");
+        println!("When implemented, daemon will:");
         println!("  • Run in background automatically");
         println!("  • Start on system boot (optional)");
         println!("  • Auto-restart on crash");
@@ -1075,9 +1088,8 @@ fn cmd_ui(no_daemon: bool, daemon_socket: Option<String>, detach: bool) -> anyho
     }
 
     // Set environment variables for daemon connection
-    let socket_path = daemon_socket.unwrap_or_else(|| {
-        get_daemon_socket_path(None).to_string_lossy().to_string()
-    });
+    let socket_path =
+        daemon_socket.unwrap_or_else(|| get_daemon_socket_path(None).to_string_lossy().to_string());
 
     println!("  Desktop: {}", desktop_dir.display());
     println!("  Socket:  {}", socket_path);
@@ -1118,20 +1130,27 @@ fn cmd_dev(
     ui_only: bool,
     port: Option<u16>,
 ) -> anyhow::Result<()> {
-    println!("{}", "🔧 Starting PMSynapse development environment...".bright_cyan());
+    println!(
+        "{}",
+        "🔧 Starting PMSynapse development environment...".bright_cyan()
+    );
     println!();
 
     let profile_name = profile.clone().unwrap_or_else(|| "dev".to_string());
     let http_port = port.unwrap_or(7878);
 
     println!("  Profile: {}", profile_name.bright_cyan());
-    println!("  Mode:    {}", if daemon_only {
-        "daemon only"
-    } else if ui_only {
-        "UI only"
-    } else {
-        "full stack"
-    }.bright_yellow());
+    println!(
+        "  Mode:    {}",
+        if daemon_only {
+            "daemon only"
+        } else if ui_only {
+            "UI only"
+        } else {
+            "full stack"
+        }
+        .bright_yellow()
+    );
     println!();
 
     let project_root = find_project_root()?;
@@ -1151,7 +1170,10 @@ fn cmd_dev(
             println!("{}", "  Daemon already running".yellow());
         } else {
             // In a real implementation, start the daemon in background
-            println!("{}", "  ⚠ Daemon placeholder (not yet implemented)".yellow());
+            println!(
+                "{}",
+                "  ⚠ Daemon placeholder (not yet implemented)".yellow()
+            );
         }
         println!();
     }
@@ -1179,11 +1201,17 @@ fn cmd_dev(
         let mut cmd = std::process::Command::new("pnpm");
         cmd.args(["tauri", "dev"])
             .current_dir(&desktop_dir)
-            .env("PMSYNAPSE_DAEMON_SOCKET", socket_path.to_string_lossy().to_string())
+            .env(
+                "PMSYNAPSE_DAEMON_SOCKET",
+                socket_path.to_string_lossy().to_string(),
+            )
             .env("PMSYNAPSE_DEV_MODE", "true")
             .env("PMSYNAPSE_PROFILE", &profile_name);
 
-        println!("{}", "Running development server (Ctrl+C to stop)...".dimmed());
+        println!(
+            "{}",
+            "Running development server (Ctrl+C to stop)...".dimmed()
+        );
         println!();
 
         let mut child = cmd.spawn()?;
@@ -1261,7 +1289,11 @@ fn cmd_thoughts(action: ThoughtsCommands) -> anyhow::Result<()> {
             no_commit,
         } => thoughts_sync(message, push, pull, no_commit),
 
-        ThoughtsCommands::Open { path, editor, scope } => thoughts_open(path, editor, scope),
+        ThoughtsCommands::Open {
+            path,
+            editor,
+            scope,
+        } => thoughts_open(path, editor, scope),
 
         ThoughtsCommands::Profile { action } => thoughts_profile(action),
 
@@ -1326,17 +1358,19 @@ fn thoughts_init(
 
     println!(
         "{}",
-        format!("  ✓ Created thoughts directory: {}", project_thoughts.display()).green()
+        format!(
+            "  ✓ Created thoughts directory: {}",
+            project_thoughts.display()
+        )
+        .green()
     );
 
     // Create symlink in project
-    if thoughts_path.exists() {
-        if force {
-            if thoughts_path.is_symlink() {
-                std::fs::remove_file(thoughts_path)?;
-            } else {
-                std::fs::remove_dir_all(thoughts_path)?;
-            }
+    if thoughts_path.exists() && force {
+        if thoughts_path.is_symlink() {
+            std::fs::remove_file(thoughts_path)?;
+        } else {
+            std::fs::remove_dir_all(thoughts_path)?;
         }
     }
 
@@ -1346,7 +1380,10 @@ fn thoughts_init(
     #[cfg(windows)]
     std::os::windows::fs::symlink_dir(&project_thoughts, thoughts_path)?;
 
-    println!("{}", "  ✓ Created symlink: thoughts/ → ~/.pmsynapse/thoughts/...".green());
+    println!(
+        "{}",
+        "  ✓ Created symlink: thoughts/ → ~/.pmsynapse/thoughts/...".green()
+    );
 
     // Create global symlink
     let global_link = thoughts_path.join("global");
@@ -1364,9 +1401,7 @@ fn thoughts_init(
     if gitignore.exists() {
         let content = std::fs::read_to_string(gitignore)?;
         if !content.contains(gitignore_entry) {
-            let mut file = std::fs::OpenOptions::new()
-                .append(true)
-                .open(gitignore)?;
+            let mut file = std::fs::OpenOptions::new().append(true).open(gitignore)?;
             use std::io::Write;
             writeln!(file, "\n# PMSynapse thoughts (symlinked, do not commit)")?;
             writeln!(file, "{}", gitignore_entry)?;
@@ -1415,7 +1450,12 @@ username: {}
     Ok(())
 }
 
-fn thoughts_new(doc_type: ThoughtType, title: String, scope: String, open: bool) -> anyhow::Result<()> {
+fn thoughts_new(
+    doc_type: ThoughtType,
+    title: String,
+    scope: String,
+    open: bool,
+) -> anyhow::Result<()> {
     let thoughts_path = Path::new("thoughts");
     if !thoughts_path.exists() {
         println!(
@@ -1517,11 +1557,11 @@ fn thoughts_search(
     // Determine search paths based on scope
     let search_paths: Vec<PathBuf> = match scope.as_str() {
         "shared" => vec![thoughts_path.join("shared")],
-        "personal" => vec![thoughts_path.join(&get_username())],
+        "personal" => vec![thoughts_path.join(get_username())],
         "global" => vec![thoughts_path.join("global")],
         _ => vec![
             thoughts_path.join("shared"),
-            thoughts_path.join(&get_username()),
+            thoughts_path.join(get_username()),
             thoughts_path.join("global"),
         ],
     };
@@ -1582,14 +1622,12 @@ fn thoughts_search(
         for path in &results {
             println!("{}", path.display());
         }
+    } else if results.is_empty() {
+        println!("{}", "  No results found.".dimmed());
     } else {
-        if results.is_empty() {
-            println!("{}", "  No results found.".dimmed());
-        } else {
-            println!("{}", format!("Found {} results:", results.len()).green());
-            for path in &results {
-                println!("  • {}", path.display());
-            }
+        println!("{}", format!("Found {} results:", results.len()).green());
+        for path in &results {
+            println!("  • {}", path.display());
         }
     }
 
@@ -1636,11 +1674,11 @@ fn thoughts_list(
 
     let search_dirs: Vec<PathBuf> = match scope.as_deref() {
         Some("shared") => vec![thoughts_path.join("shared")],
-        Some("personal") => vec![thoughts_path.join(&get_username())],
+        Some("personal") => vec![thoughts_path.join(get_username())],
         Some("global") => vec![thoughts_path.join("global")],
         _ => vec![
             thoughts_path.join("shared"),
-            thoughts_path.join(&get_username()),
+            thoughts_path.join(get_username()),
             thoughts_path.join("global"),
         ],
     };
@@ -1667,10 +1705,7 @@ fn thoughts_list(
 
     match format.as_str() {
         "json" => {
-            let json_files: Vec<_> = files
-                .iter()
-                .map(|(p, _)| p.to_string_lossy())
-                .collect();
+            let json_files: Vec<_> = files.iter().map(|(p, _)| p.to_string_lossy()).collect();
             println!("{}", serde_json::to_string_pretty(&json_files)?);
         }
         "paths" => {
@@ -1812,7 +1847,7 @@ fn thoughts_open(path: Option<String>, editor: bool, scope: Option<String>) -> a
         thoughts_path.join(p)
     } else if let Some(s) = scope {
         match s.as_str() {
-            "personal" => thoughts_path.join(&get_username()),
+            "personal" => thoughts_path.join(get_username()),
             "global" => thoughts_path.join("global"),
             _ => thoughts_path.join("shared"),
         }
@@ -1823,17 +1858,23 @@ fn thoughts_open(path: Option<String>, editor: bool, scope: Option<String>) -> a
     if editor {
         let editor_cmd = std::env::var("EDITOR").unwrap_or_else(|_| "code".to_string());
         println!("Opening {} in {}...", target.display(), editor_cmd);
-        std::process::Command::new(&editor_cmd).arg(&target).spawn()?;
+        std::process::Command::new(&editor_cmd)
+            .arg(&target)
+            .spawn()?;
     } else {
         // Open in file manager
         #[cfg(target_os = "macos")]
         std::process::Command::new("open").arg(&target).spawn()?;
 
         #[cfg(target_os = "linux")]
-        std::process::Command::new("xdg-open").arg(&target).spawn()?;
+        std::process::Command::new("xdg-open")
+            .arg(&target)
+            .spawn()?;
 
         #[cfg(target_os = "windows")]
-        std::process::Command::new("explorer").arg(&target).spawn()?;
+        std::process::Command::new("explorer")
+            .arg(&target)
+            .spawn()?;
 
         println!("Opening {}...", target.display());
     }
@@ -1859,7 +1900,11 @@ fn thoughts_profile(action: ProfileCommands) -> anyhow::Result<()> {
                     }
                 }
             } else {
-                println!("{}", "  No profiles found. Create one with 'snps thoughts profile create <name>'".dimmed());
+                println!(
+                    "{}",
+                    "  No profiles found. Create one with 'snps thoughts profile create <name>'"
+                        .dimmed()
+                );
             }
         }
 
@@ -1881,14 +1926,14 @@ fn thoughts_profile(action: ProfileCommands) -> anyhow::Result<()> {
         }
 
         ProfileCommands::Switch { name } => {
-            println!("{}", format!("Switching to profile: {}", name).bright_blue());
+            println!(
+                "{}",
+                format!("Switching to profile: {}", name).bright_blue()
+            );
 
             let profile_dir = thoughts_root.join("profiles").join(&name);
             if !profile_dir.exists() {
-                println!(
-                    "{}",
-                    format!("Profile '{}' does not exist.", name).red()
-                );
+                println!("{}", format!("Profile '{}' does not exist.", name).red());
                 return Ok(());
             }
 
@@ -2031,7 +2076,10 @@ fn check_hooks_status() -> anyhow::Result<()> {
         if content.contains("PMSynapse") {
             println!("{}", "  ✓ Pre-commit hook installed".green());
         } else {
-            println!("{}", "  ✗ Pre-commit hook exists but is not PMSynapse".yellow());
+            println!(
+                "{}",
+                "  ✗ Pre-commit hook exists but is not PMSynapse".yellow()
+            );
         }
     } else {
         println!("{}", "  ✗ Pre-commit hook not installed".red());

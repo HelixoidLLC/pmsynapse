@@ -64,7 +64,9 @@ fn test_query_by_type() {
     graph.add_node(&feature).expect("Failed to add feature");
 
     // Query tasks - currently returns empty (placeholder impl)
-    let tasks = graph.query_by_type(&NodeType::Task).expect("Failed to query");
+    let tasks = graph
+        .query_by_type(&NodeType::Task)
+        .expect("Failed to query");
     // The current implementation returns empty vec (placeholder)
     assert!(tasks.is_empty());
 }
@@ -78,7 +80,9 @@ fn test_find_related() {
     graph.add_node(&node).expect("Failed to add node");
 
     // Find related - currently returns empty (placeholder impl)
-    let related = graph.find_related(node.id, 1).expect("Failed to find related");
+    let related = graph
+        .find_related(node.id, 1)
+        .expect("Failed to find related");
     assert!(related.is_empty());
 }
 
@@ -137,7 +141,7 @@ fn test_edge_types() {
 fn test_default_graph() {
     let graph = KnowledgeGraph::default();
     // Default creates with "./synapse.db" path
-    assert!(!graph.query_by_type(&NodeType::Idea).is_ok());
+    assert!(graph.query_by_type(&NodeType::Idea).is_err());
 }
 
 // Helper functions
