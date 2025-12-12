@@ -17,7 +17,7 @@
     "CARGO_TERM_COLOR"
   ],
   "ui": "tui",
-  "concurrency": 10,
+  "concurrency": "10",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

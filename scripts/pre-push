@@ -2,6 +2,15 @@
 # Pre-push hook for PMSynapse
 # Installed by: make githooks
 # Runs checks and engine tests before allowing push
+#
+# Skip with: SKIP_PRE_PUSH=1 git push
+# Or:        git push --no-verify
+
+# Allow skipping pre-push checks
+if [ -n "$SKIP_PRE_PUSH" ] || [ -n "$CI" ]; then
+    echo "⏭️  Skipping pre-push checks (SKIP_PRE_PUSH or CI set)"
+    exit 0
+fi
 
 set -e
 

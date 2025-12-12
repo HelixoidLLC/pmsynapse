@@ -268,6 +268,6 @@ export function createErrorResponse(
   code: string,
   message: string,
   details?: unknown
-): RpcResponse<never> {
+): RpcResponse<undefined> {
   return createResponse(requestId, undefined, { code, message, details });
 }

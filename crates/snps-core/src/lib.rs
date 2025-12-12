@@ -1,0 +1,61 @@
+//! PMSynapse Core Library
+//!
+//! This crate provides the core functionality for PMSynapse:
+//! - Knowledge Graph management (CozoDB)
+//! - LLM integration (multi-provider)
+//! - IDLC (Idea Development Lifecycle) workflow
+
+pub mod graph;
+pub mod idlc;
+pub mod llm;
+
+use thiserror::Error;
+
+/// PMSynapse core error types
+#[derive(Error, Debug)]
+pub enum SynapseError {
+    #[error("Graph error: {0}")]
+    Graph(String),
+
+    #[error("LLM error: {0}")]
+    Llm(String),
+
+    #[error("IDLC error: {0}")]
+    Idlc(String),
+
+    #[error("Configuration error: {0}")]
+    Config(String),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+}
+
+/// Result type alias for PMSynapse operations
+pub type Result<T> = std::result::Result<T, SynapseError>;
+
+/// PMSynapse version
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Initialize the PMSynapse core library
+pub fn init() -> Result<()> {
+    tracing::info!("PMSynapse Core v{} initialized", VERSION);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init() {
+        assert!(init().is_ok());
+    }
+
+    #[test]
+    fn test_version() {
+        assert!(!VERSION.is_empty());
+    }
+}
