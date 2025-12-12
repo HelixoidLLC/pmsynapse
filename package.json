@@ -11,6 +11,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:desktop": "pnpm --filter @pmsynapse/desktop dev",
+    "dev:vscode": "pnpm --filter pmsynapse dev",
+    "dev:rpc": "pnpm --filter @pmsynapse/rpc dev",
     "lint": "turbo run lint",
     "lint:rust": "cargo fmt --check && cargo clippy --all-targets --all-features",
     "test": "turbo run test",
@@ -18,7 +21,8 @@
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && cargo clean",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "package:vscode": "pnpm --filter pmsynapse package"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
