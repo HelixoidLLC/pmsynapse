@@ -87,6 +87,46 @@ enum Commands {
         #[command(subcommand)]
         action: ThoughtsCommands,
     },
+
+    /// Manage the PMSynapse daemon
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonCommands,
+    },
+
+    /// Launch the PMSynapse desktop UI
+    Ui {
+        /// Don't auto-start daemon
+        #[arg(long)]
+        no_daemon: bool,
+
+        /// Use specific daemon socket
+        #[arg(long)]
+        daemon_socket: Option<String>,
+
+        /// Run in detached mode
+        #[arg(long)]
+        detach: bool,
+    },
+
+    /// Start development environment (daemon + UI with hot reload)
+    Dev {
+        /// Use specific profile (isolates daemon/db per profile)
+        #[arg(long)]
+        profile: Option<String>,
+
+        /// Only start daemon (no UI)
+        #[arg(long)]
+        daemon_only: bool,
+
+        /// Only start UI (assumes daemon running)
+        #[arg(long)]
+        ui_only: bool,
+
+        /// Custom HTTP port for daemon
+        #[arg(long)]
+        port: Option<u16>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -277,6 +317,72 @@ enum HooksCommands {
 }
 
 #[derive(Subcommand)]
+enum DaemonCommands {
+    /// Start the daemon
+    Start {
+        /// Run in foreground (don't daemonize)
+        #[arg(long)]
+        foreground: bool,
+
+        /// Custom socket path
+        #[arg(long)]
+        socket: Option<String>,
+
+        /// Custom HTTP port (0 to disable)
+        #[arg(long, default_value = "7878")]
+        port: u16,
+
+        /// Custom database path
+        #[arg(long)]
+        db: Option<String>,
+
+        /// Profile name for isolation
+        #[arg(long)]
+        profile: Option<String>,
+    },
+
+    /// Stop the daemon
+    Stop {
+        /// Force kill if graceful shutdown fails
+        #[arg(long)]
+        force: bool,
+
+        /// Specific profile to stop
+        #[arg(long)]
+        profile: Option<String>,
+    },
+
+    /// Show daemon status
+    Status {
+        /// Show detailed status
+        #[arg(long)]
+        detailed: bool,
+    },
+
+    /// Restart the daemon
+    Restart {
+        /// Profile to restart
+        #[arg(long)]
+        profile: Option<String>,
+    },
+
+    /// View daemon logs
+    Logs {
+        /// Follow log output
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Number of lines to show
+        #[arg(short, long, default_value = "50")]
+        lines: usize,
+
+        /// Specific profile logs
+        #[arg(long)]
+        profile: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum ProposalCommands {
     /// List pending proposals
     List {
@@ -365,6 +471,18 @@ fn main() -> anyhow::Result<()> {
         Commands::Team { action } => cmd_team(action),
         Commands::Graph { query, export } => cmd_graph(query, export),
         Commands::Thoughts { action } => cmd_thoughts(action),
+        Commands::Daemon { action } => cmd_daemon(action),
+        Commands::Ui {
+            no_daemon,
+            daemon_socket,
+            detach,
+        } => cmd_ui(no_daemon, daemon_socket, detach),
+        Commands::Dev {
+            profile,
+            daemon_only,
+            ui_only,
+            port,
+        } => cmd_dev(profile, daemon_only, ui_only, port),
     }
 }
 
@@ -580,6 +698,524 @@ fn cmd_graph(query: Option<String>, export: Option<String>) -> anyhow::Result<()
     }
 
     Ok(())
+}
+
+// =============================================================================
+// Daemon, UI, and Dev Commands
+// =============================================================================
+
+fn get_pmsynapse_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".pmsynapse")
+}
+
+fn get_daemon_socket_path(profile: Option<&str>) -> PathBuf {
+    let base = get_pmsynapse_dir();
+    match profile {
+        Some(p) => base.join(format!("daemon-{}.sock", p)),
+        None => base.join("daemon.sock"),
+    }
+}
+
+fn get_daemon_db_path(profile: Option<&str>) -> PathBuf {
+    let base = get_pmsynapse_dir();
+    match profile {
+        Some(p) => base.join(format!("synapse-{}.db", p)),
+        None => base.join("synapse.db"),
+    }
+}
+
+fn get_daemon_pid_path(profile: Option<&str>) -> PathBuf {
+    let base = get_pmsynapse_dir();
+    match profile {
+        Some(p) => base.join(format!("daemon-{}.pid", p)),
+        None => base.join("daemon.pid"),
+    }
+}
+
+fn get_daemon_log_path(profile: Option<&str>) -> PathBuf {
+    let base = get_pmsynapse_dir().join("logs");
+    match profile {
+        Some(p) => base.join(format!("daemon-{}.log", p)),
+        None => base.join("daemon.log"),
+    }
+}
+
+fn is_daemon_running(profile: Option<&str>) -> bool {
+    let pid_path = get_daemon_pid_path(profile);
+    if !pid_path.exists() {
+        return false;
+    }
+
+    if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
+        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+            // Check if process is running
+            #[cfg(unix)]
+            {
+                use std::process::Command;
+                let output = Command::new("kill")
+                    .args(["-0", &pid.to_string()])
+                    .output();
+                return output.map(|o| o.status.success()).unwrap_or(false);
+            }
+            #[cfg(windows)]
+            {
+                // On Windows, check with tasklist
+                let output = std::process::Command::new("tasklist")
+                    .args(["/FI", &format!("PID eq {}", pid)])
+                    .output();
+                return output
+                    .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
+                    .unwrap_or(false);
+            }
+        }
+    }
+    false
+}
+
+fn cmd_daemon(action: DaemonCommands) -> anyhow::Result<()> {
+    match action {
+        DaemonCommands::Start {
+            foreground,
+            socket,
+            port,
+            db,
+            profile,
+        } => daemon_start(foreground, socket, port, db, profile),
+
+        DaemonCommands::Stop { force, profile } => daemon_stop(force, profile),
+
+        DaemonCommands::Status { detailed } => daemon_status(detailed),
+
+        DaemonCommands::Restart { profile } => {
+            daemon_stop(false, profile.clone())?;
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            daemon_start(false, None, 7878, None, profile)
+        }
+
+        DaemonCommands::Logs {
+            follow,
+            lines,
+            profile,
+        } => daemon_logs(follow, lines, profile),
+    }
+}
+
+fn daemon_start(
+    foreground: bool,
+    socket: Option<String>,
+    port: u16,
+    db: Option<String>,
+    profile: Option<String>,
+) -> anyhow::Result<()> {
+    let profile_ref = profile.as_deref();
+
+    if is_daemon_running(profile_ref) {
+        println!(
+            "{}",
+            format!(
+                "Daemon already running{}",
+                profile_ref.map(|p| format!(" (profile: {})", p)).unwrap_or_default()
+            )
+            .yellow()
+        );
+        return Ok(());
+    }
+
+    println!("{}", "🚀 Starting PMSynapse daemon...".bright_cyan());
+
+    // Ensure directories exist
+    let pmsynapse_dir = get_pmsynapse_dir();
+    std::fs::create_dir_all(&pmsynapse_dir)?;
+    std::fs::create_dir_all(pmsynapse_dir.join("logs"))?;
+
+    let socket_path = socket
+        .map(PathBuf::from)
+        .unwrap_or_else(|| get_daemon_socket_path(profile_ref));
+    let db_path = db
+        .map(PathBuf::from)
+        .unwrap_or_else(|| get_daemon_db_path(profile_ref));
+    let _pid_path = get_daemon_pid_path(profile_ref);
+    let _log_path = get_daemon_log_path(profile_ref);
+
+    println!("  Socket:   {}", socket_path.display());
+    println!("  Database: {}", db_path.display());
+    println!("  HTTP:     {}", if port > 0 { format!("http://127.0.0.1:{}", port) } else { "disabled".to_string() });
+    if let Some(p) = &profile {
+        println!("  Profile:  {}", p.bright_cyan());
+    }
+
+    if foreground {
+        println!();
+        println!("{}", "Running in foreground (Ctrl+C to stop)...".dimmed());
+        println!();
+
+        // In foreground mode, we would run the actual daemon here
+        // For now, simulate with a placeholder
+        println!("{}", "⚠ Daemon not yet implemented - this is a placeholder".yellow());
+        println!();
+        println!("The daemon will provide:");
+        println!("  • REST API for knowledge graph operations");
+        println!("  • JSON-RPC interface for real-time events");
+        println!("  • WebSocket support for UI communication");
+        println!("  • Session management for AI agents");
+
+        // Wait for Ctrl+C
+        println!();
+        println!("{}", "Press Ctrl+C to stop...".dimmed());
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    } else {
+        // Background mode - would fork/spawn daemon process
+        // For now, create a PID file to simulate
+
+        // In a real implementation, we would:
+        // 1. Fork the process (on Unix) or spawn a detached process (on Windows)
+        // 2. Write the child PID to the PID file
+        // 3. Redirect stdout/stderr to log file
+
+        println!();
+        println!("{}", "⚠ Background daemon not yet implemented".yellow());
+        println!("  Use --foreground to run in foreground mode");
+        println!();
+
+        // Create placeholder PID file for testing
+        // std::fs::write(&pid_path, std::process::id().to_string())?;
+
+        println!("{}", "When implemented, daemon will:");
+        println!("  • Run in background automatically");
+        println!("  • Start on system boot (optional)");
+        println!("  • Auto-restart on crash");
+    }
+
+    Ok(())
+}
+
+fn daemon_stop(force: bool, profile: Option<String>) -> anyhow::Result<()> {
+    let profile_ref = profile.as_deref();
+
+    println!("{}", "Stopping PMSynapse daemon...".bright_blue());
+
+    let pid_path = get_daemon_pid_path(profile_ref);
+
+    if !pid_path.exists() {
+        println!("{}", "  Daemon is not running".dimmed());
+        return Ok(());
+    }
+
+    if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
+        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+            #[cfg(unix)]
+            {
+                use std::process::Command;
+                let signal = if force { "-9" } else { "-15" };
+                let result = Command::new("kill")
+                    .args([signal, &pid.to_string()])
+                    .output();
+
+                match result {
+                    Ok(output) if output.status.success() => {
+                        println!("{}", "  ✓ Daemon stopped".green());
+                    }
+                    _ => {
+                        println!("{}", "  ✗ Failed to stop daemon".red());
+                    }
+                }
+            }
+
+            #[cfg(windows)]
+            {
+                let result = std::process::Command::new("taskkill")
+                    .args(if force {
+                        vec!["/F", "/PID", &pid.to_string()]
+                    } else {
+                        vec!["/PID", &pid.to_string()]
+                    })
+                    .output();
+
+                match result {
+                    Ok(output) if output.status.success() => {
+                        println!("{}", "  ✓ Daemon stopped".green());
+                    }
+                    _ => {
+                        println!("{}", "  ✗ Failed to stop daemon".red());
+                    }
+                }
+            }
+        }
+    }
+
+    // Clean up PID file
+    let _ = std::fs::remove_file(&pid_path);
+
+    // Clean up socket file
+    let socket_path = get_daemon_socket_path(profile_ref);
+    let _ = std::fs::remove_file(&socket_path);
+
+    Ok(())
+}
+
+fn daemon_status(detailed: bool) -> anyhow::Result<()> {
+    println!("{}", "PMSynapse Daemon Status".bright_blue());
+    println!();
+
+    // Check default daemon
+    let running = is_daemon_running(None);
+    if running {
+        println!("  {} Default daemon: {}", "●".green(), "running".green());
+    } else {
+        println!("  {} Default daemon: {}", "○".dimmed(), "stopped".dimmed());
+    }
+
+    // Check for profile daemons
+    let pmsynapse_dir = get_pmsynapse_dir();
+    if pmsynapse_dir.exists() {
+        for entry in std::fs::read_dir(&pmsynapse_dir)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("daemon-") && name.ends_with(".pid") {
+                let profile = name
+                    .strip_prefix("daemon-")
+                    .and_then(|s| s.strip_suffix(".pid"))
+                    .unwrap_or("unknown");
+
+                let running = is_daemon_running(Some(profile));
+                if running {
+                    println!(
+                        "  {} Profile '{}': {}",
+                        "●".green(),
+                        profile.bright_cyan(),
+                        "running".green()
+                    );
+                } else {
+                    println!(
+                        "  {} Profile '{}': {}",
+                        "○".dimmed(),
+                        profile,
+                        "stopped".dimmed()
+                    );
+                }
+            }
+        }
+    }
+
+    if detailed {
+        println!();
+        println!("{}", "Paths:".bright_blue());
+        println!("  Config:   {}", get_pmsynapse_dir().display());
+        println!("  Socket:   {}", get_daemon_socket_path(None).display());
+        println!("  Database: {}", get_daemon_db_path(None).display());
+        println!("  Logs:     {}", get_daemon_log_path(None).display());
+    }
+
+    Ok(())
+}
+
+fn daemon_logs(follow: bool, lines: usize, profile: Option<String>) -> anyhow::Result<()> {
+    let log_path = get_daemon_log_path(profile.as_deref());
+
+    if !log_path.exists() {
+        println!("{}", "No log file found".dimmed());
+        return Ok(());
+    }
+
+    if follow {
+        // Use tail -f
+        #[cfg(unix)]
+        {
+            let mut child = std::process::Command::new("tail")
+                .args(["-f", "-n", &lines.to_string()])
+                .arg(&log_path)
+                .spawn()?;
+            child.wait()?;
+        }
+
+        #[cfg(windows)]
+        {
+            println!("{}", "Follow mode not supported on Windows".yellow());
+            // Fall through to show last N lines
+        }
+    }
+
+    // Show last N lines
+    let content = std::fs::read_to_string(&log_path)?;
+    let all_lines: Vec<&str> = content.lines().collect();
+    let start = all_lines.len().saturating_sub(lines);
+
+    for line in &all_lines[start..] {
+        println!("{}", line);
+    }
+
+    Ok(())
+}
+
+fn cmd_ui(no_daemon: bool, daemon_socket: Option<String>, detach: bool) -> anyhow::Result<()> {
+    println!("{}", "🖥️  Launching PMSynapse UI...".bright_cyan());
+    println!();
+
+    // Auto-start daemon if needed
+    if !no_daemon && !is_daemon_running(None) {
+        println!("{}", "Starting daemon...".dimmed());
+        daemon_start(false, daemon_socket.clone(), 7878, None, None)?;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
+    // Find the desktop app
+    let project_root = find_project_root()?;
+    let desktop_dir = project_root.join("apps").join("desktop");
+
+    if !desktop_dir.exists() {
+        println!(
+            "{}",
+            "Desktop app not found. Run from PMSynapse project root.".red()
+        );
+        return Ok(());
+    }
+
+    // Set environment variables for daemon connection
+    let socket_path = daemon_socket.unwrap_or_else(|| {
+        get_daemon_socket_path(None).to_string_lossy().to_string()
+    });
+
+    println!("  Desktop: {}", desktop_dir.display());
+    println!("  Socket:  {}", socket_path);
+    println!();
+
+    // Build and run the Tauri app
+    let mut cmd = std::process::Command::new("pnpm");
+    cmd.args(["tauri", "dev"])
+        .current_dir(&desktop_dir)
+        .env("PMSYNAPSE_DAEMON_SOCKET", &socket_path);
+
+    if detach {
+        println!("{}", "Launching in detached mode...".dimmed());
+        cmd.stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+
+        cmd.spawn()?;
+        println!("{}", "✓ UI launched in background".green());
+    } else {
+        println!("{}", "Running UI (Ctrl+C to stop)...".dimmed());
+        println!();
+        let mut child = cmd.spawn()?;
+        child.wait()?;
+    }
+
+    Ok(())
+}
+
+fn cmd_dev(
+    profile: Option<String>,
+    daemon_only: bool,
+    ui_only: bool,
+    port: Option<u16>,
+) -> anyhow::Result<()> {
+    println!("{}", "🔧 Starting PMSynapse development environment...".bright_cyan());
+    println!();
+
+    let profile_name = profile.clone().unwrap_or_else(|| "dev".to_string());
+    let http_port = port.unwrap_or(7878);
+
+    println!("  Profile: {}", profile_name.bright_cyan());
+    println!("  Mode:    {}", if daemon_only {
+        "daemon only"
+    } else if ui_only {
+        "UI only"
+    } else {
+        "full stack"
+    }.bright_yellow());
+    println!();
+
+    let project_root = find_project_root()?;
+
+    // Start daemon (unless UI-only mode)
+    if !ui_only {
+        println!("{}", "Starting development daemon...".bright_blue());
+
+        let socket_path = get_daemon_socket_path(Some(&profile_name));
+        let db_path = get_daemon_db_path(Some(&profile_name));
+
+        println!("  Socket:   {}", socket_path.display());
+        println!("  Database: {}", db_path.display());
+        println!("  HTTP:     http://127.0.0.1:{}", http_port);
+
+        if is_daemon_running(Some(&profile_name)) {
+            println!("{}", "  Daemon already running".yellow());
+        } else {
+            // In a real implementation, start the daemon in background
+            println!("{}", "  ⚠ Daemon placeholder (not yet implemented)".yellow());
+        }
+        println!();
+    }
+
+    // Start UI (unless daemon-only mode)
+    if !daemon_only {
+        println!("{}", "Starting development UI...".bright_blue());
+
+        let desktop_dir = project_root.join("apps").join("desktop");
+        if !desktop_dir.exists() {
+            println!(
+                "{}",
+                "Desktop app not found. Run from PMSynapse project root.".red()
+            );
+            return Ok(());
+        }
+
+        let socket_path = get_daemon_socket_path(Some(&profile_name));
+
+        println!("  Desktop: {}", desktop_dir.display());
+        println!("  Socket:  {}", socket_path.display());
+        println!();
+
+        // Run Tauri dev mode
+        let mut cmd = std::process::Command::new("pnpm");
+        cmd.args(["tauri", "dev"])
+            .current_dir(&desktop_dir)
+            .env("PMSYNAPSE_DAEMON_SOCKET", socket_path.to_string_lossy().to_string())
+            .env("PMSYNAPSE_DEV_MODE", "true")
+            .env("PMSYNAPSE_PROFILE", &profile_name);
+
+        println!("{}", "Running development server (Ctrl+C to stop)...".dimmed());
+        println!();
+
+        let mut child = cmd.spawn()?;
+        child.wait()?;
+    } else {
+        // Daemon-only mode - just wait
+        println!("{}", "Daemon running. Press Ctrl+C to stop...".dimmed());
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
+
+    Ok(())
+}
+
+fn find_project_root() -> anyhow::Result<PathBuf> {
+    let mut current = std::env::current_dir()?;
+
+    loop {
+        // Check for PMSynapse markers
+        if current.join("apps").join("desktop").exists()
+            || current.join(".pmsynapse").exists()
+            || current.join("Cargo.toml").exists() && current.join("apps").exists()
+        {
+            return Ok(current);
+        }
+
+        if !current.pop() {
+            // Reached root without finding project
+            return Ok(std::env::current_dir()?);
+        }
+    }
 }
 
 // =============================================================================
