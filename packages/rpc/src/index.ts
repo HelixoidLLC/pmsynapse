@@ -269,5 +269,5 @@ export function createErrorResponse(
   message: string,
   details?: unknown
 ): RpcResponse<undefined> {
-  return createResponse(requestId, undefined, { code, message, details });
+  return createResponse<never>(requestId, undefined, { code, message, details });
 }
