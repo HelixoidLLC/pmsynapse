@@ -70,4 +70,5 @@ apps/desktop/src-tauri/WixTools/
 .bmad-core
 
 # PMSynapse thoughts (symlinked, do not commit)
+thoughts
 thoughts/
