@@ -65,3 +65,6 @@ coverage/
 
 # Tauri
 apps/desktop/src-tauri/WixTools/
+.qwen
+.cursor
+.bmad-core
