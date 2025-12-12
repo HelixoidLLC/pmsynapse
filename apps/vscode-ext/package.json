@@ -1,0 +1,103 @@
+{
+  "name": "pmsynapse",
+  "displayName": "PMSynapse",
+  "description": "AI-enabled project management with knowledge graphs and IDLC workflow",
+  "version": "0.1.0",
+  "publisher": "HelixoidLLC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HelixoidLLC/pmsynapse"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "project-management",
+    "knowledge-graph",
+    "ai",
+    "idlc",
+    "workflow"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "pmsynapse.openPlayground",
+        "title": "PMSynapse: Open Playground",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "pmsynapse.createIdlcItem",
+        "title": "PMSynapse: Create IDLC Item",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pmsynapse.showKnowledgeGraph",
+        "title": "PMSynapse: Show Knowledge Graph",
+        "icon": "$(type-hierarchy)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pmsynapse",
+          "title": "PMSynapse",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "pmsynapse": [
+        {
+          "id": "pmsynapse.idlcItems",
+          "name": "IDLC Items"
+        },
+        {
+          "id": "pmsynapse.knowledgeGraph",
+          "name": "Knowledge Graph"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PMSynapse",
+      "properties": {
+        "pmsynapse.llmProvider": {
+          "type": "string",
+          "default": "openai",
+          "enum": ["openai", "anthropic", "ollama"],
+          "description": "Default LLM provider for AI features"
+        },
+        "pmsynapse.graphDatabasePath": {
+          "type": "string",
+          "default": ".synapse/graph.db",
+          "description": "Path to the knowledge graph database"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts",
+    "package": "pnpm build && vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies"
+  },
+  "dependencies": {
+    "@pmsynapse/rpc": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  }
+}
