@@ -43,16 +43,10 @@
   },
   "plugins": {
     "fs": {
-      "scope": ["$APPDATA/**", "$HOME/.pmsynapse/**", "./**"]
+      "requireLiteralLeadingDot": false
     },
     "shell": {
-      "scope": [
-        {
-          "name": "snps",
-          "cmd": "snps",
-          "args": true
-        }
-      ]
+      "open": true
     }
   }
 }
