@@ -1,0 +1,60 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    ".env",
+    ".env.local"
+  ],
+  "globalPassThroughEnv": [
+    "NODE_ENV",
+    "CI",
+    "RUST_LOG",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY"
+  ],
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**", ".next/**", "target/**"]
+    },
+    "build:rust": {
+      "dependsOn": [],
+      "outputs": ["target/**"],
+      "cache": true
+    },
+    "build:wasm": {
+      "dependsOn": ["build:rust"],
+      "outputs": ["pkg/**"],
+      "cache": true
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^lint"],
+      "outputs": []
+    },
+    "lint:rust": {
+      "dependsOn": [],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "test:rust": {
+      "dependsOn": ["build:rust"],
+      "outputs": [],
+      "cache": false
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

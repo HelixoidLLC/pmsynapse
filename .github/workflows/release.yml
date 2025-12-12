@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: PMSynapse ${{ github.ref_name }}
+          draft: true
+          prerelease: false
+
+  build-desktop:
+    name: Build Desktop
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: pmsynapse_linux_amd64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: pmsynapse_macos_amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: pmsynapse_macos_arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: pmsynapse_windows_amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build desktop app
+        run: |
+          cd apps/desktop
+          pnpm tauri build --target ${{ matrix.target }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*
+
+  build-cli:
+    name: Build CLI
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: snps-cli_linux_amd64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: snps-cli_macos_amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: snps-cli_macos_arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: snps-cli_windows_amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build CLI
+        run: cargo build --release --target ${{ matrix.target }} -p snps-cli
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            target/${{ matrix.target }}/release/snps*
+
+  build-wasm:
+    name: Build WASM
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM
+        run: |
+          cd crates/snps-wasm
+          wasm-pack build --target web --release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snps-wasm
+          path: crates/snps-wasm/pkg/

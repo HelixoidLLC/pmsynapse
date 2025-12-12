@@ -25,3 +25,43 @@ coordination/orchestration/*
 claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+target/
+dist/
+*.wasm
+pkg/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test
+coverage/
+*.lcov
+
+# Turbo
+.turbo/
+
+# Tauri
+apps/desktop/src-tauri/WixTools/

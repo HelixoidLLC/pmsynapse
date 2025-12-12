@@ -1,0 +1,33 @@
+[package]
+name = "snps-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PMSynapse CLI - command line interface for project management"
+
+[[bin]]
+name = "snps"
+path = "src/main.rs"
+
+[dependencies]
+# Core library
+snps-core = { path = "../snps-core" }
+
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# CLI-specific
+colored = "2"
+indicatif = "0.17"
+dialoguer = "0.11"
+directories = "5"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"

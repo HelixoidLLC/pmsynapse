@@ -1,0 +1,39 @@
+[package]
+name = "snps-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PMSynapse core library - knowledge graph, LLM integration, IDLC workflow"
+
+[lib]
+name = "snps_core"
+path = "src/lib.rs"
+
+[features]
+default = []
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+
+# Storage - SQLite for MVP
+rusqlite = { workspace = true }
+
+# LLM integration
+reqwest = { workspace = true }
+
+# UUID generation
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+insta = { workspace = true }
+tokio-test = "0.4"
