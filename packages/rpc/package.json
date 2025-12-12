@@ -15,7 +15,11 @@
   "scripts": {
     "dev": "tsup --watch",
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'No linting configured'",
+    "test": "echo 'No tests configured'",
+    "clean": "rm -rf dist",
+    "release": "pnpm build"
   },
   "devDependencies": {
     "tsup": "^8.0.0",

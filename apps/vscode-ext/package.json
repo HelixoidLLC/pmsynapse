@@ -88,7 +88,10 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext ts",
+    "test": "echo 'No tests configured yet'",
+    "clean": "rm -rf dist *.vsix",
     "package": "pnpm build && vsce package --no-dependencies",
+    "release": "pnpm package",
     "publish": "vsce publish --no-dependencies"
   },
   "dependencies": {

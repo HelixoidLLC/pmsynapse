@@ -2,29 +2,44 @@
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [
     ".env",
-    ".env.local"
+    ".env.local",
+    "Cargo.toml",
+    "Cargo.lock"
   ],
   "globalPassThroughEnv": [
     "NODE_ENV",
     "CI",
+    "GITHUB_ACTIONS",
     "RUST_LOG",
+    "RUST_BACKTRACE",
     "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY"
+    "ANTHROPIC_API_KEY",
+    "CARGO_TERM_COLOR"
   ],
   "ui": "tui",
+  "concurrency": 10,
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "build/**", ".next/**", "target/**"]
+      "outputs": ["dist/**", "build/**", ".next/**", "out/**"],
+      "inputs": ["src/**", "package.json", "tsconfig.json"]
     },
-    "build:rust": {
+    "build:engine": {
       "dependsOn": [],
-      "outputs": ["target/**"],
+      "outputs": ["../../target/release/**"],
+      "inputs": ["../../engine/**/*.rs", "../../Cargo.toml", "../../Cargo.lock"],
+      "cache": true,
+      "env": ["CARGO_TERM_COLOR"]
+    },
+    "build:debug": {
+      "dependsOn": [],
+      "outputs": ["../../target/debug/**"],
+      "inputs": ["../../engine/**/*.rs", "../../Cargo.toml", "../../Cargo.lock"],
       "cache": true
     },
-    "build:wasm": {
-      "dependsOn": ["build:rust"],
-      "outputs": ["pkg/**"],
+    "build:tauri": {
+      "dependsOn": ["build:engine", "build"],
+      "outputs": ["src-tauri/target/**"],
       "cache": true
     },
     "dev": {
@@ -33,28 +48,63 @@
     },
     "lint": {
       "dependsOn": ["^lint"],
-      "outputs": []
+      "outputs": [],
+      "inputs": ["src/**", "*.json", "*.js", "*.ts"]
     },
-    "lint:rust": {
+    "lint:engine": {
       "dependsOn": [],
-      "outputs": []
+      "outputs": [],
+      "inputs": ["../../engine/**/*.rs"],
+      "cache": true
     },
     "test": {
       "dependsOn": ["build"],
       "outputs": ["coverage/**"],
-      "cache": false
+      "cache": false,
+      "env": ["CI"]
     },
-    "test:rust": {
-      "dependsOn": ["build:rust"],
+    "test:engine": {
+      "dependsOn": ["build:debug"],
       "outputs": [],
-      "cache": false
+      "cache": false,
+      "env": ["CI", "RUST_BACKTRACE"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"],
-      "outputs": []
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "inputs": ["src/**", "tsconfig.json"]
+    },
+    "release": {
+      "dependsOn": ["^release", "build", "test"],
+      "outputs": [],
+      "cache": false,
+      "env": ["CI", "GITHUB_TOKEN", "NPM_TOKEN"]
+    },
+    "release:engine": {
+      "dependsOn": ["lint:engine", "test:engine"],
+      "outputs": ["../../target/release/**"],
+      "cache": false,
+      "env": ["CI", "CARGO_REGISTRY_TOKEN"]
+    },
+    "release:vscode": {
+      "dependsOn": ["^build", "build", "test"],
+      "outputs": ["*.vsix"],
+      "cache": false,
+      "env": ["VSCE_PAT"]
+    },
+    "release:desktop": {
+      "dependsOn": ["build:tauri"],
+      "outputs": ["src-tauri/target/release/bundle/**"],
+      "cache": false,
+      "env": ["TAURI_SIGNING_PRIVATE_KEY"]
     },
     "clean": {
       "cache": false
+    },
+    "package": {
+      "dependsOn": ["build"],
+      "outputs": ["*.vsix", "*.tgz"],
+      "cache": true
     }
   }
 }
