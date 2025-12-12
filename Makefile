@@ -1,4 +1,4 @@
-.PHONY: all build test clean dev lint fmt check wasm desktop cli install help
+.PHONY: all build test clean dev lint fmt check desktop cli install help
 
 # Default target
 all: build
@@ -19,7 +19,6 @@ help:
 	@echo "  dev         Run development server"
 	@echo "  desktop     Build desktop app"
 	@echo "  cli         Build CLI tool"
-	@echo "  wasm        Build WASM package"
 	@echo "  install     Install dependencies"
 	@echo "  setup       Initial project setup"
 
@@ -56,7 +55,6 @@ clean:
 	cargo clean
 	rm -rf apps/desktop/dist
 	rm -rf apps/desktop/src-tauri/target
-	rm -rf crates/snps-wasm/pkg
 
 # Development server
 dev:
@@ -78,18 +76,9 @@ cli:
 cli-install:
 	cargo install --path crates/snps-cli
 
-# Build WASM
-wasm:
-	cd crates/snps-wasm && wasm-pack build --target web
-
-# Build WASM release
-wasm-release:
-	cd crates/snps-wasm && wasm-pack build --target web --release
-
 # Install all dependencies
 install:
 	pnpm install
-	rustup target add wasm32-unknown-unknown
 
 # Initial setup
 setup: install

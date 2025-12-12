@@ -3,7 +3,6 @@ resolver = "2"
 members = [
   "crates/snps-core",
   "crates/snps-cli",
-  "crates/snps-wasm",
   "apps/desktop/src-tauri",
 ]
 
@@ -33,7 +32,7 @@ anyhow = "1"
 thiserror = "1"
 
 # Storage - using rusqlite for MVP, CozoDB later when dependency issues resolved
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 # Graph & Vector Database (CozoDB) - temporarily disabled due to dependency conflicts
 # cozo = { version = "0.7", default-features = true }
 
@@ -57,12 +56,6 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-log = "2"
 tauri-plugin-store = "2"
-
-# WASM (conditional)
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-js-sys = "0.3"
-web-sys = "0.3"
 
 # Testing
 insta = { version = "1", features = ["yaml"] }
