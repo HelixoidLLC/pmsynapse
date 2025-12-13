@@ -467,7 +467,7 @@ enum ClaudeCommands {
 
     /// List Claude Code sessions
     List {
-        /// Directory to search (defaults to ~/.claude/projects)
+        /// Directory to search (defaults to ~/.claude/projects/<project-path>)
         #[arg(long, short)]
         dir: Option<String>,
 
@@ -475,13 +475,17 @@ enum ClaudeCommands {
         #[arg(long, default_value = "10")]
         recent: usize,
 
-        /// Filter by project path
+        /// Filter by project path (overrides auto-detection from cwd)
         #[arg(long)]
         project: Option<String>,
 
         /// Output format: table, json, paths
         #[arg(long, default_value = "table")]
         format: String,
+
+        /// Show all sessions including agent sub-sessions
+        #[arg(long)]
+        all: bool,
     },
 
     /// Analyze session hierarchy and statistics
@@ -2409,7 +2413,8 @@ fn cmd_claude(action: ClaudeCommands) -> anyhow::Result<()> {
             recent,
             project,
             format,
-        } => cmd_claude_list(dir, recent, project, format),
+            all,
+        } => cmd_claude_list(dir, recent, project, format, all),
 
         ClaudeCommands::Analyze {
             dir,
@@ -2545,15 +2550,168 @@ fn cmd_claude_parse(
     Ok(())
 }
 
+/// Session metadata extracted from JSONL file
+#[derive(Debug)]
+struct SessionInfo {
+    path: PathBuf,
+    session_id: String,
+    title: Option<String>,
+    message_count: usize,
+    git_branch: Option<String>,
+    modified: std::time::SystemTime,
+    is_agent: bool,
+}
+
+/// Convert a filesystem path to Claude's project directory format
+/// e.g., /Users/igor/Dev/Helixoid/pmsynapse -> -Users-igor-Dev-Helixoid-pmsynapse
+fn path_to_claude_project_dir(path: &Path) -> String {
+    path.to_string_lossy().replace('/', "-")
+}
+
+/// Get the Claude sessions directory for the current project
+fn get_claude_project_dir() -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    let project_subdir = path_to_claude_project_dir(&cwd);
+    let sessions_dir = get_claude_sessions_dir().join(&project_subdir);
+
+    if sessions_dir.exists() {
+        Some(sessions_dir)
+    } else {
+        None
+    }
+}
+
+/// Check if a filename looks like a GUID (main session) vs agent file
+fn is_main_session_file(filename: &str) -> bool {
+    // Main sessions are UUIDs like: 0c721d51-3a4f-4db0-b5c9-e364c9c55de4.jsonl
+    // Agent sessions start with: agent-
+    !filename.starts_with("agent-") && filename.ends_with(".jsonl") && filename.len() > 30
+    // UUIDs are 36 chars + .jsonl
+}
+
+/// Extract session metadata from a JSONL file
+fn extract_session_info(path: &Path) -> Option<SessionInfo> {
+    use std::io::{BufRead, BufReader};
+
+    let filename = path.file_name()?.to_string_lossy().to_string();
+    let is_agent = filename.starts_with("agent-");
+
+    let file = std::fs::File::open(path).ok()?;
+    let reader = BufReader::new(file);
+
+    let mut session_id = None;
+    let mut title = None;
+    let mut git_branch = None;
+    let mut message_count = 0;
+    let mut first_user_message_found = false;
+
+    for line in reader.lines().take(50) {
+        // Read up to 50 lines to find metadata
+        let line = line.ok()?;
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let record: serde_json::Value = serde_json::from_str(&line).ok()?;
+
+        // Extract session ID
+        if session_id.is_none() {
+            session_id = record
+                .get("sessionId")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+        }
+
+        // Extract git branch
+        if git_branch.is_none() {
+            git_branch = record
+                .get("gitBranch")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+        }
+
+        // Count messages
+        let msg_type = record.get("type").and_then(|v| v.as_str());
+        if msg_type == Some("user") || msg_type == Some("assistant") {
+            message_count += 1;
+        }
+
+        // Extract title from first non-meta user message
+        if !first_user_message_found
+            && msg_type == Some("user")
+            && record.get("isMeta").and_then(|v| v.as_bool()) != Some(true)
+        {
+            if let Some(content) = record
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_array())
+            {
+                for item in content {
+                    if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                            // Skip command messages and system messages
+                            if !text.starts_with('<') && !text.contains("<command") {
+                                // Take first line, truncate to reasonable length
+                                let first_line = text.lines().next().unwrap_or("");
+                                let truncated: String = first_line.chars().take(60).collect();
+                                title = Some(if first_line.len() > 60 {
+                                    format!("{}...", truncated)
+                                } else {
+                                    truncated
+                                });
+                                first_user_message_found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If we still don't have a title and it's a main session, try to count all messages
+    if title.is_none() && !is_agent {
+        // Count remaining messages
+        let file = std::fs::File::open(path).ok()?;
+        let reader = BufReader::new(file);
+        message_count = reader.lines().filter(|l| l.is_ok()).count();
+    }
+
+    let modified = path.metadata().ok()?.modified().ok()?;
+
+    Some(SessionInfo {
+        path: path.to_path_buf(),
+        session_id: session_id.unwrap_or_else(|| filename.replace(".jsonl", "")),
+        title,
+        message_count,
+        git_branch,
+        modified,
+        is_agent,
+    })
+}
+
 fn cmd_claude_list(
     dir: Option<String>,
     recent: usize,
     project: Option<String>,
     format: String,
+    show_all: bool,
 ) -> anyhow::Result<()> {
-    let search_dir = dir
-        .map(|d| expand_path(&d))
-        .unwrap_or_else(get_claude_sessions_dir);
+    // Determine search directory
+    let search_dir = if let Some(d) = dir {
+        expand_path(&d)
+    } else if let Some(p) = &project {
+        // Use explicit project path
+        let project_subdir = if p.starts_with('-') {
+            p.clone()
+        } else {
+            path_to_claude_project_dir(Path::new(p))
+        };
+        get_claude_sessions_dir().join(project_subdir)
+    } else {
+        // Auto-detect from current directory
+        get_claude_project_dir().unwrap_or_else(get_claude_sessions_dir)
+    };
 
     if !search_dir.exists() {
         println!(
@@ -2564,57 +2722,44 @@ fn cmd_claude_list(
             )
             .yellow()
         );
+        println!();
+        println!(
+            "{}",
+            "Hint: Run this command from a project directory, or use --dir to specify a path."
+                .dimmed()
+        );
         return Ok(());
     }
 
-    println!(
-        "{}",
-        format!("Searching: {}", search_dir.display()).bright_blue()
-    );
-    println!();
+    // Collect session files
+    let mut sessions: Vec<SessionInfo> = Vec::new();
 
-    // Find all JSONL files
-    let mut sessions: Vec<(PathBuf, std::time::SystemTime, Option<String>)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&search_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
+                let filename = path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_default();
 
-    fn find_sessions(
-        dir: &Path,
-        sessions: &mut Vec<(PathBuf, std::time::SystemTime, Option<String>)>,
-        project_filter: &Option<String>,
-    ) {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    find_sessions(&path, sessions, project_filter);
-                } else if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
-                    // Apply project filter
-                    if let Some(filter) = project_filter {
-                        if !path.to_string_lossy().contains(filter) {
-                            continue;
-                        }
-                    }
+                // Filter agents unless --all is specified
+                if !show_all && !is_main_session_file(&filename) {
+                    continue;
+                }
 
-                    if let Ok(meta) = path.metadata() {
-                        if let Ok(modified) = meta.modified() {
-                            // Try to extract project name from path
-                            let project_name = path
-                                .parent()
-                                .and_then(|p| p.file_name())
-                                .map(|n| n.to_string_lossy().to_string());
-                            sessions.push((path, modified, project_name));
-                        }
-                    }
+                if let Some(info) = extract_session_info(&path) {
+                    sessions.push(info);
                 }
             }
         }
     }
 
-    find_sessions(&search_dir, &mut sessions, &project);
-
     // Sort by modification time (newest first)
-    sessions.sort_by(|a, b| b.1.cmp(&a.1));
+    sessions.sort_by(|a, b| b.modified.cmp(&a.modified));
 
     // Apply recent limit
+    let total_found = sessions.len();
     sessions.truncate(recent);
 
     if sessions.is_empty() {
@@ -2626,44 +2771,75 @@ fn cmd_claude_list(
         "json" => {
             let json_sessions: Vec<_> = sessions
                 .iter()
-                .map(|(path, _, project)| {
+                .map(|s| {
                     serde_json::json!({
-                        "path": path.to_string_lossy(),
-                        "project": project
+                        "session_id": s.session_id,
+                        "path": s.path.to_string_lossy(),
+                        "title": s.title,
+                        "message_count": s.message_count,
+                        "git_branch": s.git_branch,
+                        "is_agent": s.is_agent
                     })
                 })
                 .collect();
             println!("{}", serde_json::to_string_pretty(&json_sessions)?);
         }
         "paths" => {
-            for (path, _, _) in &sessions {
-                println!("{}", path.display());
+            for session in &sessions {
+                println!("{}", session.path.display());
             }
         }
         _ => {
-            println!(
-                "{}",
-                format!("Found {} sessions (showing {})", sessions.len(), recent).green()
-            );
+            // Table format (similar to Claude's /resume)
+            let showing = sessions.len().min(recent);
+            if total_found > showing {
+                println!(
+                    "{}",
+                    format!("Showing {} of {} sessions", showing, total_found).dimmed()
+                );
+            }
             println!();
 
-            for (path, modified, project) in &sessions {
-                let age = modified.elapsed().unwrap_or_default();
-                let age_str = if age.as_secs() < 3600 {
-                    format!("{}m ago", age.as_secs() / 60)
+            for session in &sessions {
+                let age = session.modified.elapsed().unwrap_or_default();
+                let age_str = if age.as_secs() < 60 {
+                    "just now".to_string()
+                } else if age.as_secs() < 3600 {
+                    format!("{} minutes ago", age.as_secs() / 60)
                 } else if age.as_secs() < 86400 {
-                    format!("{}h ago", age.as_secs() / 3600)
+                    format!("{} hours ago", age.as_secs() / 3600)
                 } else {
-                    format!("{}d ago", age.as_secs() / 86400)
+                    format!("{} days ago", age.as_secs() / 86400)
                 };
 
-                let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                let proj_str = project
-                    .as_ref()
-                    .map(|p| format!(" [{}]", p.bright_cyan()))
-                    .unwrap_or_default();
+                // Title or fallback
+                let title = session.title.as_deref().unwrap_or(if session.is_agent {
+                    "(Agent session)"
+                } else {
+                    "(No title)"
+                });
 
-                println!("  {} {}{}", filename, age_str.dimmed(), proj_str);
+                // Branch info
+                let branch_str = session
+                    .git_branch
+                    .as_ref()
+                    .map(|b| format!(" · {}", b.bright_cyan()))
+                    .unwrap_or_else(|| " · -".dimmed().to_string());
+
+                // Agent indicator
+                let agent_marker = if session.is_agent {
+                    format!("{} ", "⚡".yellow())
+                } else {
+                    format!("{} ", "❯".green())
+                };
+
+                println!("{}{}", agent_marker, title.bright_white());
+                println!(
+                    "  {} · {} messages{}",
+                    age_str.dimmed(),
+                    session.message_count,
+                    branch_str
+                );
             }
         }
     }
