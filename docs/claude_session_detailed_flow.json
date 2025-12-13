@@ -1,0 +1,410 @@
+{
+  "session_hierarchy": {
+    "8062250a-fd4d-442d-9eba-bdb36204487f": {
+      "message_count": 62,
+      "tool_calls": 19,
+      "spawned_agents": [
+        "d4014551",
+        "7aadbf82"
+      ]
+    },
+    "bc289ee8-ddb8-4e66-a0c9-358fa860c171": {
+      "message_count": 132,
+      "tool_calls": 36,
+      "spawned_agents": [
+        "aeb03d5",
+        "a159b53",
+        "ae7e606",
+        "a7fd90a",
+        "a944119",
+        "a6145ad"
+      ]
+    },
+    "427bca66-48b7-4c71-8833-0078e1a8643b": {
+      "message_count": 4,
+      "tool_calls": 0,
+      "spawned_agents": []
+    },
+    "8e170928-cdde-436f-a2a6-5b99b81a8ed5": {
+      "message_count": 173,
+      "tool_calls": 51,
+      "spawned_agents": []
+    },
+    "4b3e7222-b95d-4a7c-b60a-9317d0626e04": {
+      "message_count": 2,
+      "tool_calls": 0,
+      "spawned_agents": [
+        "ac3343a",
+        "abccae2"
+      ]
+    },
+    "6df416b8-9af7-4dc2-9c55-3179c4afb8a8": {
+      "message_count": 42,
+      "tool_calls": 15,
+      "spawned_agents": [
+        "a9c6145",
+        "a732fbb",
+        "a78863c"
+      ]
+    }
+  },
+  "tool_call_sequences": {
+    "8062250a-fd4d-442d-9eba-bdb36204487f": [
+      {
+        "tool": "Glob",
+        "timestamp": "2025-12-12T12:45:52.901Z",
+        "uuid": "595f99cb-c81d-46c3-b777-61f2a4e3b8d6"
+      },
+      {
+        "tool": "Glob",
+        "timestamp": "2025-12-12T12:45:53.265Z",
+        "uuid": "3393d313-abb5-461b-8bca-c4cbd6ba9849"
+      },
+      {
+        "tool": "Glob",
+        "timestamp": "2025-12-12T12:45:53.592Z",
+        "uuid": "975ab5c8-18a1-4a45-b605-a37f033770af"
+      },
+      {
+        "tool": "Glob",
+        "timestamp": "2025-12-12T12:45:54.036Z",
+        "uuid": "3a9e9a9b-7de9-404a-9a63-405f5e35a8fd"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T12:45:54.474Z",
+        "uuid": "917a4c4b-1b75-4c42-9659-43c81f881d94"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T12:45:57.935Z",
+        "uuid": "74531cc8-974e-4d96-ab40-9a24abb56a9d"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T12:45:58.407Z",
+        "uuid": "1b4cde05-bbe6-4111-aef3-1256a62c4547"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T12:45:58.983Z",
+        "uuid": "0e50c299-b4fe-4be8-92d6-c89c60edabab"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T12:45:59.410Z",
+        "uuid": "90c3dcde-3f35-491f-af9c-2b4701829b67"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T12:45:59.900Z",
+        "uuid": "f74a5b19-7310-436b-8b5d-1f414d3ed0a3"
+      }
+    ],
+    "bc289ee8-ddb8-4e66-a0c9-358fa860c171": [
+      {
+        "tool": "TodoWrite",
+        "timestamp": "2025-12-12T18:07:47.461Z",
+        "uuid": "2fffe5df-1861-4157-8d51-5160df1e6331"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:07:53.691Z",
+        "uuid": "959a52c2-6c1c-4c51-8d2b-c845de8c9956",
+        "task_type": "codebase-locator",
+        "task_desc": "Locate build config files"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:07:56.842Z",
+        "uuid": "107ff7ea-b69e-4856-9e55-9628c0ed5657",
+        "task_type": "codebase-analyzer",
+        "task_desc": "Analyze turbo and pnpm config"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:07:58.319Z",
+        "uuid": "9688d715-94df-414e-a6fa-90c7b84df1f7",
+        "task_type": "codebase-analyzer",
+        "task_desc": "Analyze Rust build process"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:08:00.741Z",
+        "uuid": "91a229e9-c0c2-4d61-bc4a-8d55e12e4921",
+        "task_type": "codebase-analyzer",
+        "task_desc": "Analyze Tauri desktop build"
+      },
+      {
+        "tool": "TodoWrite",
+        "timestamp": "2025-12-12T18:09:19.061Z",
+        "uuid": "7ac64a1c-d15a-4d38-8d4d-da166323d37b"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:09:22.961Z",
+        "uuid": "ed7b3acb-16c5-438a-9a9b-54ad8f2ce704"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:09:23.537Z",
+        "uuid": "4c09baeb-1d0d-4095-9b72-b3128583ac81"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:09:23.985Z",
+        "uuid": "a63212d4-19b0-4525-a0e8-e104ad093678"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:09:24.479Z",
+        "uuid": "1b8b67fc-f5c1-425e-848d-a5828007a307"
+      }
+    ],
+    "427bca66-48b7-4c71-8833-0078e1a8643b": [],
+    "8e170928-cdde-436f-a2a6-5b99b81a8ed5": [
+      {
+        "tool": "TodoWrite",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "2fffe5df-1861-4157-8d51-5160df1e6331"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "959a52c2-6c1c-4c51-8d2b-c845de8c9956",
+        "task_type": "codebase-locator",
+        "task_desc": "Locate build config files"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "107ff7ea-b69e-4856-9e55-9628c0ed5657",
+        "task_type": "codebase-analyzer",
+        "task_desc": "Analyze turbo and pnpm config"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "9688d715-94df-414e-a6fa-90c7b84df1f7",
+        "task_type": "codebase-analyzer",
+        "task_desc": "Analyze Rust build process"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "91a229e9-c0c2-4d61-bc4a-8d55e12e4921",
+        "task_type": "codebase-analyzer",
+        "task_desc": "Analyze Tauri desktop build"
+      },
+      {
+        "tool": "TodoWrite",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "7ac64a1c-d15a-4d38-8d4d-da166323d37b"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "ed7b3acb-16c5-438a-9a9b-54ad8f2ce704"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "4c09baeb-1d0d-4095-9b72-b3128583ac81"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "a63212d4-19b0-4525-a0e8-e104ad093678"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T18:34:47.106Z",
+        "uuid": "1b8b67fc-f5c1-425e-848d-a5828007a307"
+      }
+    ],
+    "4b3e7222-b95d-4a7c-b60a-9317d0626e04": [],
+    "6df416b8-9af7-4dc2-9c55-3179c4afb8a8": [
+      {
+        "tool": "TodoWrite",
+        "timestamp": "2025-12-12T20:47:30.819Z",
+        "uuid": "3265a4dd-4798-4711-9ffe-21e4ab0ce438"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T20:47:31.537Z",
+        "uuid": "da2809ae-c9b5-495d-83a8-50e01af91be4"
+      },
+      {
+        "tool": "TodoWrite",
+        "timestamp": "2025-12-12T20:47:52.268Z",
+        "uuid": "a6c279db-a6c0-4596-9072-875c1197de96"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T20:47:53.525Z",
+        "uuid": "7bbd6580-e5bc-4dde-8024-3df623577cf9"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T20:47:54.240Z",
+        "uuid": "96e52543-5938-434c-ae34-bce101066360"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T20:47:54.872Z",
+        "uuid": "cc5c2725-40f0-4e54-b0ef-961bcdbc2027"
+      },
+      {
+        "tool": "Bash",
+        "timestamp": "2025-12-12T20:48:11.815Z",
+        "uuid": "6705ecc1-72e0-460e-88bf-11b0c8e03bf9"
+      },
+      {
+        "tool": "Read",
+        "timestamp": "2025-12-12T20:48:12.493Z",
+        "uuid": "65dee157-c4e9-4492-9b1c-e21b25d26a9d"
+      },
+      {
+        "tool": "Task",
+        "timestamp": "2025-12-12T20:48:16.476Z",
+        "uuid": "207cf86b-e000-413d-9ec2-d7d119882501",
+        "task_type": "web-search-researcher",
+        "task_desc": "Research Claude Code architecture"
+      },
+      {
+        "tool": "TodoWrite",
+        "timestamp": "2025-12-12T20:54:17.685Z",
+        "uuid": "712d4535-261d-484f-9585-25afbecbbd19"
+      }
+    ]
+  },
+  "agent_details": {
+    "aeb03d5": {
+      "parent_session": "bc289ee8-ddb8-4e66-a0c9-358fa860c171",
+      "message_count": 85,
+      "tools_used": [
+        "Glob",
+        "Grep"
+      ],
+      "tool_call_count": 39
+    },
+    "a9c6145": {
+      "parent_session": "6df416b8-9af7-4dc2-9c55-3179c4afb8a8",
+      "message_count": 38,
+      "tools_used": [
+        "WebFetch",
+        "WebSearch"
+      ],
+      "tool_call_count": 15
+    },
+    "a2828ca": {
+      "parent_session": "728f271c-945c-4c78-80f3-961fd0ca2510",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a159b53": {
+      "parent_session": "bc289ee8-ddb8-4e66-a0c9-358fa860c171",
+      "message_count": 2,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "d4014551": {
+      "parent_session": "8062250a-fd4d-442d-9eba-bdb36204487f",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "ae7e606": {
+      "parent_session": "bc289ee8-ddb8-4e66-a0c9-358fa860c171",
+      "message_count": 21,
+      "tools_used": [
+        "Glob",
+        "Read"
+      ],
+      "tool_call_count": 9
+    },
+    "a732fbb": {
+      "parent_session": "6df416b8-9af7-4dc2-9c55-3179c4afb8a8",
+      "message_count": 2,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a5220c9": {
+      "parent_session": "676dab71-7ac4-4782-8525-8f5b661e5e8a",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a7fd90a": {
+      "parent_session": "bc289ee8-ddb8-4e66-a0c9-358fa860c171",
+      "message_count": 9,
+      "tools_used": [
+        "Read"
+      ],
+      "tool_call_count": 3
+    },
+    "a82e180": {
+      "parent_session": "728f271c-945c-4c78-80f3-961fd0ca2510",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a85d13b": {
+      "parent_session": "676dab71-7ac4-4782-8525-8f5b661e5e8a",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a621ca1": {
+      "parent_session": "791a867f-1764-41eb-b43b-62d54c0d1271",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "ac3343a": {
+      "parent_session": "4b3e7222-b95d-4a7c-b60a-9317d0626e04",
+      "message_count": 2,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a78863c": {
+      "parent_session": "6df416b8-9af7-4dc2-9c55-3179c4afb8a8",
+      "message_count": 2,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "7aadbf82": {
+      "parent_session": "8062250a-fd4d-442d-9eba-bdb36204487f",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a944119": {
+      "parent_session": "bc289ee8-ddb8-4e66-a0c9-358fa860c171",
+      "message_count": 17,
+      "tools_used": [
+        "Read"
+      ],
+      "tool_call_count": 7
+    },
+    "abccae2": {
+      "parent_session": "4b3e7222-b95d-4a7c-b60a-9317d0626e04",
+      "message_count": 2,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a0af39b": {
+      "parent_session": "791a867f-1764-41eb-b43b-62d54c0d1271",
+      "message_count": 1,
+      "tools_used": [],
+      "tool_call_count": 0
+    },
+    "a6145ad": {
+      "parent_session": "bc289ee8-ddb8-4e66-a0c9-358fa860c171",
+      "message_count": 2,
+      "tools_used": [],
+      "tool_call_count": 0
+    }
+  }
+}
