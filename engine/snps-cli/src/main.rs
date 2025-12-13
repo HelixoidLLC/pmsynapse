@@ -538,6 +538,24 @@ enum ClaudeCommands {
         #[arg(long)]
         project: Option<String>,
     },
+
+    /// Convert between session export formats (JSON <-> Markdown)
+    Convert {
+        /// Input file (exported JSON or Markdown)
+        input: String,
+
+        /// Output format
+        #[arg(long, short, value_enum)]
+        format: ClaudeExportFormat,
+
+        /// Output file (defaults to stdout)
+        #[arg(long, short)]
+        output: Option<String>,
+
+        /// Pretty print JSON output
+        #[arg(long)]
+        pretty: bool,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -545,6 +563,7 @@ enum ClaudeExportFormat {
     Json,
     Markdown,
     Md,
+    Html,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -2431,6 +2450,13 @@ fn cmd_claude(action: ClaudeCommands) -> anyhow::Result<()> {
             main_only,
             project,
         } => cmd_claude_import(claude_dir, format, main_only, project),
+
+        ClaudeCommands::Convert {
+            input,
+            format,
+            output,
+            pretty,
+        } => cmd_claude_convert(input, format, output, pretty),
     }
 }
 
@@ -2444,6 +2470,66 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(expanded.as_ref())
 }
 
+/// Resolve a session ID (full or partial) to a file path
+/// If the input is already a path, returns it as-is
+/// Otherwise searches for matching session files
+fn resolve_session_path(id_or_path: &str) -> anyhow::Result<PathBuf> {
+    let path = expand_path(id_or_path);
+
+    // If it's already a valid path, use it
+    if path.exists() {
+        return Ok(path);
+    }
+
+    // Otherwise, treat it as a session ID and search for it
+    let sessions_dir = get_claude_sessions_dir();
+
+    // Try current project first
+    if let Some(project_dir) = get_claude_project_dir() {
+        if let Some(found) = search_session_in_dir(&project_dir, id_or_path)? {
+            return Ok(found);
+        }
+    }
+
+    // Search all projects
+    for entry in std::fs::read_dir(&sessions_dir)? {
+        let entry = entry?;
+        let project_path = entry.path();
+
+        if project_path.is_dir() {
+            if let Some(found) = search_session_in_dir(&project_path, id_or_path)? {
+                return Ok(found);
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Session not found: {}. Searched in {} projects.",
+        id_or_path,
+        sessions_dir.display()
+    ))
+}
+
+fn search_session_in_dir(dir: &Path, id: &str) -> anyhow::Result<Option<PathBuf>> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+            // Match full session ID
+            if filename.starts_with(id) && filename.ends_with(".jsonl") {
+                return Ok(Some(path));
+            }
+
+            // Match partial session ID (e.g., "0c721d51" matches "0c721d51-3a4f-4db0-b5c9-e364c9c55de4.jsonl")
+            if filename.contains(id) && filename.ends_with(".jsonl") {
+                return Ok(Some(path));
+            }
+        }
+    }
+    Ok(None)
+}
+
 fn cmd_claude_parse(
     file: String,
     format: ClaudeExportFormat,
@@ -2451,15 +2537,7 @@ fn cmd_claude_parse(
     pretty: bool,
     save: bool,
 ) -> anyhow::Result<()> {
-    let file_path = expand_path(&file);
-
-    if !file_path.exists() {
-        println!(
-            "{}",
-            format!("Session file not found: {}", file_path.display()).red()
-        );
-        return Ok(());
-    }
+    let file_path = resolve_session_path(&file)?;
 
     println!(
         "{}",
@@ -2488,6 +2566,7 @@ fn cmd_claude_parse(
         ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
             exporter.export_markdown_string(&session, &stats)
         }
+        ClaudeExportFormat::Html => exporter.export_html_string(&session, &stats, None),
     };
 
     // Save to thoughts directory if requested
@@ -2498,6 +2577,7 @@ fn cmd_claude_parse(
         let extension = match format {
             ClaudeExportFormat::Json => "json",
             ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => "md",
+            ClaudeExportFormat::Html => "html",
         };
 
         // Create a filename from session ID (first 8 chars)
@@ -2630,14 +2710,41 @@ fn extract_session_info(path: &Path) -> Option<SessionInfo> {
                 .map(String::from);
         }
 
-        // Count messages
         let msg_type = record.get("type").and_then(|v| v.as_str());
-        if msg_type == Some("user") || msg_type == Some("assistant") {
-            message_count += 1;
+
+        // Extract title from summary record (preferred method)
+        if title.is_none() && msg_type == Some("summary") {
+            title = record
+                .get("summary")
+                .and_then(|v| v.as_str())
+                .map(String::from);
         }
 
-        // Extract title from first non-meta user message
-        if !first_user_message_found
+        // Count messages (exclude tool results and meta messages)
+        if msg_type == Some("user") || msg_type == Some("assistant") {
+            // Check if it's a tool result (user message with tool_result content)
+            let is_tool_result = msg_type == Some("user")
+                && record
+                    .get("message")
+                    .and_then(|m| m.get("content"))
+                    .and_then(|c| c.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .any(|item| item.get("type").and_then(|t| t.as_str()) == Some("tool_result"))
+                    })
+                    .unwrap_or(false);
+
+            // Skip meta messages and tool results
+            let is_meta = record.get("isMeta").and_then(|v| v.as_bool()).unwrap_or(false);
+
+            if !is_tool_result && !is_meta {
+                message_count += 1;
+            }
+        }
+
+        // Fallback: Extract title from first non-meta user message if no summary found
+        if title.is_none()
+            && !first_user_message_found
             && msg_type == Some("user")
             && record.get("isMeta").and_then(|v| v.as_bool()) != Some(true)
         {
@@ -2833,9 +2940,17 @@ fn cmd_claude_list(
                     format!("{} ", "❯".green())
                 };
 
+                // Extract first 8 chars of session ID for display
+                let session_id_short = session
+                    .session_id
+                    .chars()
+                    .take(8)
+                    .collect::<String>();
+
                 println!("{}{}", agent_marker, title.bright_white());
                 println!(
-                    "  {} · {} messages{}",
+                    "  {} · {} · {} messages{}",
+                    session_id_short.bright_black(),
                     age_str.dimmed(),
                     session.message_count,
                     branch_str
@@ -2933,7 +3048,10 @@ fn cmd_claude_analyze(
         let out_file = expand_path(&out_path);
 
         let result = match format {
-            ClaudeExportFormat::Json => serde_json::to_string_pretty(&hierarchy)?,
+            ClaudeExportFormat::Json | ClaudeExportFormat::Html => {
+                // HTML export for analyze command falls back to JSON
+                serde_json::to_string_pretty(&hierarchy)?
+            }
             ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
                 let mut md = String::new();
                 md.push_str("# Claude Code Session Analysis\n\n");
@@ -3151,6 +3269,7 @@ fn cmd_claude_import(
                     let extension = match format {
                         ClaudeExportFormat::Json => "json",
                         ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => "md",
+                        ClaudeExportFormat::Html => "html",
                     };
 
                     let short_id = if session.session_id.len() >= 8 {
@@ -3175,6 +3294,9 @@ fn cmd_claude_import(
                         ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
                             exporter.export_markdown_string(session, &stats)
                         }
+                        ClaudeExportFormat::Html => {
+                            exporter.export_html_string(session, &stats, None)
+                        }
                     };
 
                     std::fs::write(&save_path, content)?;
@@ -3197,6 +3319,7 @@ fn cmd_claude_import(
                         let extension = match format {
                             ClaudeExportFormat::Json => "json",
                             ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => "md",
+                            ClaudeExportFormat::Html => "html",
                         };
 
                         let filename = format!("agent-{}.{}", short_id, extension);
@@ -3214,6 +3337,9 @@ fn cmd_claude_import(
                                 .unwrap_or_default(),
                             ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
                                 exporter.export_markdown_string(agent, &stats)
+                            }
+                            ClaudeExportFormat::Html => {
+                                exporter.export_html_string(agent, &stats, None)
                             }
                         };
 
@@ -3266,4 +3392,131 @@ fn cmd_claude_import(
     }
 
     Ok(())
+}
+
+fn cmd_claude_convert(
+    input: String,
+    format: ClaudeExportFormat,
+    output: Option<String>,
+    pretty: bool,
+) -> anyhow::Result<()> {
+    use snps_core::claude::{SessionAnalyzer, SessionExporter};
+
+    let input_path = expand_path(&input);
+
+    if !input_path.exists() {
+        println!(
+            "{}",
+            format!("Input file not found: {}", input_path.display()).red()
+        );
+        return Ok(());
+    }
+
+    println!(
+        "{}",
+        format!("Converting: {}", input_path.display()).bright_blue()
+    );
+
+    // Read and deserialize the JSON export file
+    let json_content = std::fs::read_to_string(&input_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read input file: {}", e))?;
+
+    let thread_data: snps_core::claude::ThreadData = serde_json::from_str(&json_content)
+        .map_err(|e| anyhow::anyhow!("Failed to parse JSON export: {}", e))?;
+
+    // Convert ThreadData back to Session for export
+    let session = thread_data_to_session(&thread_data);
+    let analyzer = SessionAnalyzer::new(String::new());
+    let stats = analyzer.analyze_session(&session);
+
+    let exporter = SessionExporter::new();
+
+    match format {
+        ClaudeExportFormat::Json => {
+            let json = if pretty {
+                serde_json::to_string_pretty(&thread_data)?
+            } else {
+                serde_json::to_string(&thread_data)?
+            };
+
+            if let Some(output_path) = output {
+                std::fs::write(&output_path, json)?;
+                println!("{}", format!("✓ Exported to: {}", output_path).green());
+            } else {
+                println!("{}", json);
+            }
+        }
+        ClaudeExportFormat::Markdown | ClaudeExportFormat::Md => {
+            if let Some(output_path) = output {
+                let out_path = PathBuf::from(output_path);
+                exporter.export_markdown(&session, &stats, &out_path)?;
+                println!("{}", format!("✓ Exported to: {}", out_path.display()).green());
+            } else {
+                println!(
+                    "{}",
+                    "Error: Markdown export requires --output option".red()
+                );
+                return Err(anyhow::anyhow!("Markdown export requires output file"));
+            }
+        }
+        ClaudeExportFormat::Html => {
+            if let Some(output_path) = output {
+                let out_path = PathBuf::from(output_path);
+                exporter.export_html(&session, &stats, &out_path, None)?;
+                println!("{}", format!("✓ Exported to: {}", out_path.display()).green());
+            } else {
+                // Output HTML to stdout
+                let html = exporter.export_html_string(&session, &stats, None);
+                println!("{}", html);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Convert ThreadData back to Session for re-export
+fn thread_data_to_session(thread_data: &snps_core::claude::ThreadData) -> snps_core::claude::Session {
+    use snps_core::claude::{Message, MessageContent, Session, SessionMetadata};
+
+    let messages: Vec<Message> = thread_data
+        .messages
+        .iter()
+        .map(|tm| Message {
+            uuid: tm.uuid.clone(),
+            parent_uuid: tm.parent_uuid.clone(),
+            is_sidechain: false,
+            message_type: tm.message_type.clone(),
+            role: tm.role.clone(),
+            timestamp: tm.timestamp,
+            content: MessageContent {
+                text: tm.content.clone(),
+                thinking: tm.thinking.clone(),
+                raw_content: serde_json::Value::Null,
+            },
+            tool_uses: tm.tool_uses.clone(),
+        })
+        .collect();
+
+    let metadata = SessionMetadata {
+        cwd: thread_data.metadata.cwd.clone(),
+        version: thread_data.metadata.version.clone(),
+        git_branch: thread_data.metadata.git_branch.clone(),
+        start_time: thread_data.created_at,
+        end_time: thread_data.updated_at,
+        duration_seconds: thread_data.metadata.duration_seconds,
+        message_count: thread_data.metadata.message_count,
+        tool_call_count: thread_data.metadata.tool_call_count,
+        file_size_bytes: 0,
+    };
+
+    Session {
+        session_id: thread_data.thread_id.clone(),
+        is_agent: thread_data.metadata.is_agent,
+        agent_id: None,
+        parent_session_id: thread_data.metadata.parent_session_id.clone(),
+        metadata,
+        messages,
+        child_agents: thread_data.child_agents.clone(),
+    }
 }

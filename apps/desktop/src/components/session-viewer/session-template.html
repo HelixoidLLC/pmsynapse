@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{title}} - Claude Session</title>
+  <style>
+    /* CSS Variables - Light/Dark Theme */
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 240 10% 3.9%;
+      --card: 0 0% 100%;
+      --card-foreground: 240 10% 3.9%;
+      --muted: 240 4.8% 95.9%;
+      --muted-foreground: 240 3.8% 46.1%;
+      --accent: 240 4.8% 95.9%;
+      --accent-foreground: 240 5.9% 10%;
+      --border: 240 5.9% 90%;
+      --input: 240 5.9% 90%;
+      --radius: 0.5rem;
+      --editor-background: 240 10% 4%;
+
+      /* Syntax highlighting */
+      --hljs-function: #61afef;
+      --hljs-keyword: #c678dd;
+      --hljs-class: #e5c07b;
+      --hljs-string: #98c379;
+      --hljs-comment: #5c6370;
+      --hljs-number: #d19a66;
+
+      /* Diff colors */
+      --diff-addition-background: hsl(120 40% 95%);
+      --diff-addition-foreground: hsl(120 40% 30%);
+      --diff-removal-background: hsl(0 40% 95%);
+      --diff-removal-foreground: hsl(0 40% 30%);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: 240 10% 3.9%;
+        --foreground: 0 0% 98%;
+        --card: 240 10% 3.9%;
+        --card-foreground: 0 0% 98%;
+        --muted: 240 3.7% 15.9%;
+        --muted-foreground: 240 5% 64.9%;
+        --accent: 240 3.7% 15.9%;
+        --accent-foreground: 0 0% 98%;
+        --border: 240 3.7% 15.9%;
+        --input: 240 3.7% 15.9%;
+
+        --diff-addition-background: hsl(120 40% 15%);
+        --diff-addition-foreground: hsl(120 40% 80%);
+        --diff-removal-background: hsl(0 40% 15%);
+        --diff-removal-foreground: hsl(0 40% 80%);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: hsl(var(--background));
+      color: hsl(var(--foreground));
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .session-viewer {
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    /* Header */
+    .session-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 2rem 0;
+      text-align: center;
+    }
+
+    .session-title {
+      font-size: 1.5rem;
+      font-weight: 500;
+      letter-spacing: -0.025em;
+    }
+
+    .session-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: hsl(var(--muted-foreground));
+      font-size: 0.875rem;
+    }
+
+    .session-meta .separator {
+      opacity: 0.5;
+    }
+
+    /* Avatar */
+    .avatar {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 50%;
+      background: hsl(var(--muted));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.625rem;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    /* Thread container */
+    .thread-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Message blocks */
+    .message-block {
+      position: relative;
+    }
+
+    .block-link {
+      position: absolute;
+      left: -1.5rem;
+      top: 0.25rem;
+      opacity: 0;
+      transition: opacity 0.2s;
+      color: hsl(var(--muted-foreground));
+      text-decoration: none;
+    }
+
+    .message-block:hover .block-link {
+      opacity: 1;
+    }
+
+    /* User message */
+    .user-message {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .user-message .content {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.25rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* File chips */
+    .file-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .file-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.125rem 0.5rem;
+      background: hsl(var(--muted));
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      color: hsl(var(--muted-foreground));
+    }
+
+    .file-chip svg {
+      width: 0.75rem;
+      height: 0.75rem;
+    }
+
+    /* Assistant message */
+    .assistant-message {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    /* Thinking block */
+    .thinking-block {
+      border-radius: 0.25rem;
+    }
+
+    .thinking-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      background: transparent;
+      border: none;
+      color: hsl(var(--muted-foreground));
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    .thinking-trigger:hover {
+      background: hsl(var(--muted));
+    }
+
+    .thinking-trigger svg {
+      width: 1rem;
+      height: 1rem;
+      transition: transform 0.2s;
+    }
+
+    .thinking-trigger[aria-expanded="true"] svg:first-child {
+      transform: rotate(90deg);
+    }
+
+    .thinking-content {
+      display: none;
+      margin-top: 0.25rem;
+      padding: 0.75rem;
+      background: hsl(var(--card));
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.25rem;
+      color: hsl(var(--muted-foreground));
+      font-size: 0.875rem;
+    }
+
+    .thinking-content.expanded {
+      display: block;
+    }
+
+    /* Tool use chips */
+    .tool-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.5rem;
+      background: hsl(var(--card) / 0.6);
+      border: 1px solid hsl(var(--border) / 0.8);
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+
+    .tool-chip:hover {
+      background: hsl(var(--muted));
+    }
+
+    .tool-chip svg {
+      width: 1rem;
+      height: 1rem;
+      color: hsl(var(--muted-foreground));
+    }
+
+    .tool-chip .tool-name {
+      color: hsl(var(--muted-foreground));
+    }
+
+    .tool-chip .file-path {
+      display: flex;
+      align-items: baseline;
+    }
+
+    .tool-chip .path-prefix {
+      opacity: 0.6;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tool-chip .path-separator {
+      opacity: 0.6;
+    }
+
+    .tool-status {
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .tool-status.success {
+      background: hsl(142 76% 36% / 0.15);
+      color: hsl(142 76% 45%);
+    }
+
+    .tool-status.error {
+      background: hsl(0 84% 60% / 0.15);
+      color: hsl(0 84% 60%);
+    }
+
+    .tool-details {
+      display: none;
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      border-top: 1px solid hsl(var(--border) / 0.5);
+    }
+
+    .tool-details.expanded {
+      display: block;
+    }
+
+    .tool-details-label {
+      font-size: 0.75rem;
+      color: hsl(var(--muted-foreground));
+      margin-bottom: 0.5rem;
+    }
+
+    /* Markdown content */
+    .markdown h1 {
+      font-size: 1.75em;
+      font-weight: 700;
+      border-bottom: 2px solid hsl(var(--border));
+      margin: 1.8em 0 0.7em;
+      padding-bottom: 0.4em;
+    }
+
+    .markdown h1:first-child { margin-top: 0; }
+
+    .markdown h2 {
+      font-size: 1.5em;
+      font-weight: 700;
+      margin: 1.5em 0 0.6em;
+    }
+
+    .markdown h2:first-child { margin-top: 0; }
+
+    .markdown h3 {
+      font-size: 1.3em;
+      font-weight: 600;
+      margin: 1.4em 0 0.5em;
+    }
+
+    .markdown h3:first-child { margin-top: 0; }
+
+    .markdown p {
+      margin: 0.75em 0;
+    }
+
+    .markdown p:first-child { margin-top: 0; }
+    .markdown p:last-child { margin-bottom: 0; }
+
+    .markdown ul, .markdown ol {
+      padding-left: 1.5rem;
+      margin: 0.5em 0 0.75em;
+    }
+
+    .markdown ul { list-style-type: disc; }
+    .markdown ol { list-style-type: decimal; }
+
+    .markdown li {
+      margin: 0.4em 0;
+    }
+
+    .markdown code {
+      font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    }
+
+    .markdown :not(pre) > code {
+      background: hsl(var(--muted));
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+
+    .markdown pre {
+      background: hsl(var(--editor-background));
+      border-radius: calc(var(--radius) - 6px);
+      padding: 0.75rem;
+      overflow-x: auto;
+      margin: 0.75em 0;
+    }
+
+    .markdown pre code {
+      background: transparent;
+      padding: 0;
+      font-size: 0.875rem;
+      color: #e5e7eb;
+    }
+
+    .markdown a {
+      color: hsl(217 91% 60%);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .markdown a:hover {
+      text-decoration: none;
+    }
+
+    .markdown strong {
+      font-weight: 700;
+    }
+
+    .markdown em {
+      font-style: italic;
+    }
+
+    /* Code block with header */
+    .code-block {
+      background: hsl(240 10% 4%);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      margin: 0.75em 0;
+    }
+
+    .code-block-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid hsl(240 5% 20%);
+    }
+
+    .code-block-lang {
+      font-size: 0.75rem;
+      color: hsl(240 5% 60%);
+    }
+
+    .code-block-copy {
+      padding: 0.25rem;
+      background: transparent;
+      border: none;
+      color: hsl(240 5% 60%);
+      cursor: pointer;
+    }
+
+    .code-block-copy:hover {
+      color: #fff;
+    }
+
+    .code-block pre {
+      margin: 0;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+
+    .code-block code {
+      font-size: 0.875rem;
+      color: #e5e7eb;
+    }
+
+    /* Syntax highlighting */
+    .hljs-keyword { color: var(--hljs-keyword); }
+    .hljs-built_in, .hljs-function { color: var(--hljs-function); }
+    .hljs-string { color: var(--hljs-string); }
+    .hljs-number { color: var(--hljs-number); }
+    .hljs-comment { color: var(--hljs-comment); font-style: italic; }
+    .hljs-title, .hljs-class { color: var(--hljs-class); font-style: italic; }
+
+    /* Statistics */
+    .session-stats {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: hsl(var(--card));
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.5rem;
+    }
+
+    .session-stats h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (min-width: 640px) {
+      .stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .stat-card {
+      padding: 1rem;
+      background: hsl(var(--muted) / 0.5);
+      border-radius: 0.5rem;
+    }
+
+    .stat-card .label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: hsl(var(--muted-foreground));
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-card .value {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .tool-usage {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .tool-usage-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.25rem 0.75rem;
+      background: hsl(var(--muted));
+      border-radius: 9999px;
+    }
+
+    .tool-usage-item .name {
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .tool-usage-item .count {
+      padding: 0.125rem 0.5rem;
+      background: hsl(var(--background));
+      border-radius: 9999px;
+      font-size: 0.75rem;
+    }
+
+    /* Navigation dots */
+    .message-nav {
+      position: fixed;
+      top: 50%;
+      left: 1rem;
+      transform: translateY(-50%);
+      display: none;
+      flex-direction: column;
+      padding: 0.25rem 0;
+    }
+
+    @media (min-width: 1024px) {
+      .message-nav {
+        display: flex;
+      }
+    }
+
+    .nav-dot {
+      display: flex;
+      align-items: center;
+      gap: 0.125rem;
+      padding: 0.1875rem 0;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+
+    .nav-dot .dot {
+      width: 0.125rem;
+      height: 0.125rem;
+      background: currentColor;
+      border-radius: 50%;
+      opacity: 0.3;
+    }
+
+    .nav-dot .line {
+      width: 1.5rem;
+      height: 1px;
+      background: currentColor;
+      border-radius: 1px;
+      opacity: 0.3;
+      transform: scaleX(0.8);
+      transform-origin: left;
+    }
+
+    .nav-dot:hover .dot,
+    .nav-dot:hover .line {
+      opacity: 1;
+    }
+
+    /* Icons */
+    .icon {
+      display: inline-flex;
+      width: 1em;
+      height: 1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="session-viewer">
+    <!-- Navigation dots -->
+    <nav class="message-nav" id="messageNav"></nav>
+
+    <!-- Header -->
+    <header class="session-header">
+      <h1 class="session-title">{{title}}</h1>
+      <div class="session-meta">
+        <span class="avatar">{{author_initials}}</span>
+        <span>{{author}}</span>
+        <span class="separator">•</span>
+        <span>{{date}}</span>
+        {{#if git_branch}}
+        <span class="separator">•</span>
+        <span>{{git_branch}}</span>
+        {{/if}}
+      </div>
+    </header>
+
+    <!-- Messages -->
+    <div class="thread-container" id="threadContainer">
+      <!-- Messages will be injected here -->
+    </div>
+
+    <!-- Statistics -->
+    <div class="session-stats">
+      <h2>Session Statistics</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Messages
+          </div>
+          <div class="value">{{message_count}}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+            </svg>
+            Tool Calls
+          </div>
+          <div class="value">{{tool_call_count}}</div>
+        </div>
+        {{#if duration}}
+        <div class="stat-card">
+          <div class="label">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Duration
+          </div>
+          <div class="value">{{duration}}</div>
+        </div>
+        {{/if}}
+      </div>
+
+      {{#if tool_usage}}
+      <h3 style="font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.75rem;">Tool Usage</h3>
+      <div class="tool-usage" id="toolUsage">
+        <!-- Tool usage will be injected here -->
+      </div>
+      {{/if}}
+    </div>
+  </div>
+
+  <script>
+    // Session data injected from JSON
+    const sessionData = {{session_json}};
+
+    // Render session
+    function renderSession(session) {
+      const container = document.getElementById('threadContainer');
+      const nav = document.getElementById('messageNav');
+
+      const messages = session.messages.filter(m =>
+        m.message_type === 'user' || m.message_type === 'assistant'
+      );
+
+      // Render navigation dots
+      nav.innerHTML = messages.map((_, i) => `
+        <button class="nav-dot" onclick="scrollToMessage(${i})">
+          <span class="dot"></span>
+          <span class="line"></span>
+        </button>
+      `).join('');
+
+      // Render messages
+      container.innerHTML = messages.map((msg, i) =>
+        renderMessage(msg, i)
+      ).join('');
+
+      // Render tool usage
+      const toolUsage = {};
+      session.messages.forEach(msg => {
+        msg.tool_uses.forEach(tool => {
+          toolUsage[tool.tool_name] = (toolUsage[tool.tool_name] || 0) + 1;
+        });
+      });
+
+      const toolUsageEl = document.getElementById('toolUsage');
+      if (toolUsageEl) {
+        toolUsageEl.innerHTML = Object.entries(toolUsage)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) => `
+            <div class="tool-usage-item">
+              <span class="name">${name}</span>
+              <span class="count">${count}</span>
+            </div>
+          `).join('');
+      }
+    }
+
+    function renderMessage(message, index) {
+      const isUser = message.message_type === 'user';
+
+      return `
+        <div class="message-block" id="message-${index}">
+          <a href="#message-${index}" class="block-link">#</a>
+          ${isUser ? renderUserMessage(message) : renderAssistantMessage(message, index)}
+        </div>
+      `;
+    }
+
+    function renderUserMessage(message) {
+      const files = extractFileReferences(message.content.text || '');
+
+      return `
+        <div class="user-message">
+          <div class="avatar">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div class="content">
+            ${files.length > 0 ? `
+              <div class="file-chips">
+                ${files.map(f => `
+                  <span class="file-chip">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    ${f.split('/').pop()}
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+            ${escapeHtml(message.content.text || '')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAssistantMessage(message, blockIndex) {
+      const hasThinking = Boolean(message.content.thinking);
+      const hasText = Boolean(message.content.text);
+      const hasTools = message.tool_uses.length > 0;
+
+      return `
+        <div class="assistant-message">
+          ${hasThinking ? renderThinking(message.content.thinking, blockIndex) : ''}
+          ${hasText ? `<div class="markdown">${renderMarkdown(message.content.text)}</div>` : ''}
+          ${hasTools ? message.tool_uses.map((t, i) => renderToolUse(t, `${blockIndex}-${i}`)).join('') : ''}
+        </div>
+      `;
+    }
+
+    function renderThinking(content, blockIndex) {
+      const thinkingId = `thinking-${blockIndex}`;
+      return `
+        <div class="thinking-block">
+          <button class="thinking-trigger" onclick="toggleThinking('${thinkingId}')" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+              <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/>
+              <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/>
+              <path d="M3.477 10.896a4 4 0 0 1 .585-.396"/>
+              <path d="M19.938 10.5a4 4 0 0 1 .585.396"/>
+              <path d="M6 18a4 4 0 0 1-1.967-.516"/>
+              <path d="M19.967 17.484A4 4 0 0 1 18 18"/>
+            </svg>
+            Thinking
+          </button>
+          <div class="thinking-content" id="${thinkingId}">
+            <div class="markdown">${renderMarkdown(content)}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderToolUse(tool, toolId) {
+      const summary = getToolSummary(tool);
+      const filePath = tool.input.file_path || tool.input.path;
+      const isFileOp = ['Read', 'Write', 'Edit'].includes(tool.tool_name);
+
+      return `
+        <div class="tool-chip" onclick="toggleToolDetails('tool-${toolId}')">
+          ${getToolIcon(tool.tool_name)}
+          ${isFileOp && filePath ? `
+            <span class="file-path">
+              <span class="path-prefix">${filePath.split('/').slice(0, -1).join('/')}</span>
+              <span class="path-separator">/</span>
+              <span>${filePath.split('/').pop()}</span>
+            </span>
+          ` : `
+            <span class="tool-name">${summary}</span>
+          `}
+          ${tool.output ? `
+            <span class="tool-status ${tool.output.success ? 'success' : 'error'}">
+              ${tool.output.success ? '✓' : '✗'}
+            </span>
+          ` : ''}
+        </div>
+        <div class="tool-details" id="tool-${toolId}">
+          <div class="tool-details-label">Input</div>
+          <div class="code-block">
+            <pre><code>${escapeHtml(JSON.stringify(tool.input, null, 2))}</code></pre>
+          </div>
+          ${tool.output ? `
+            <div class="tool-details-label" style="margin-top: 0.75rem;">Output</div>
+            ${tool.output.error ? `
+              <div style="padding: 0.75rem; background: hsl(0 40% 95%); border-radius: 0.25rem; color: hsl(0 50% 40%);">
+                ${escapeHtml(tool.output.error)}
+              </div>
+            ` : `
+              <div class="code-block">
+                <pre><code>${escapeHtml(
+                  typeof tool.output.content === 'string'
+                    ? tool.output.content.slice(0, 2000)
+                    : JSON.stringify(tool.output.content, null, 2)
+                )}</code></pre>
+              </div>
+            `}
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderMarkdown(text) {
+      if (!text) return '';
+
+      // Code blocks
+      text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        return `<div class="code-block"><pre><code>${escapeHtml(code.trim())}</code></pre></div>`;
+      });
+
+      // Headers
+      text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+      text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+      text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+      // Bold
+      text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+      // Inline code
+      text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+      // Lists
+      text = text.replace(/^- (.+)$/gm, '<li>$1</li>');
+      text = text.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+
+      // Paragraphs
+      text = text.split('\n\n').map(p => {
+        if (p.startsWith('<') || p.trim() === '') return p;
+        return `<p>${p}</p>`;
+      }).join('');
+
+      return text;
+    }
+
+    function getToolSummary(tool) {
+      const input = tool.input;
+      switch (tool.tool_name) {
+        case 'Read': return `Read ${(input.file_path || '').split('/').pop()}`;
+        case 'Write': return `Write ${(input.file_path || '').split('/').pop()}`;
+        case 'Edit': return `Edit ${(input.file_path || '').split('/').pop()}`;
+        case 'Bash': return (input.command || '').slice(0, 50);
+        case 'Grep': return `Search "${input.pattern}"`;
+        case 'Glob': return `Find ${input.pattern}`;
+        case 'Task': return input.description || 'Running task...';
+        case 'TodoWrite': return 'Updated TODOs';
+        default: return tool.tool_name;
+      }
+    }
+
+    function getToolIcon(name) {
+      const icons = {
+        Read: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        Write: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        Edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        Bash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+        Grep: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+        Glob: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+        Task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
+        TodoWrite: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>'
+      };
+      return icons[name] || '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+    }
+
+    function extractFileReferences(text) {
+      const matches = text.match(/@[\w./\-]+|file:\/\/[^\s]+/g) || [];
+      return matches.map(m => m.replace(/^@|^file:\/\//, ''));
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function scrollToMessage(index) {
+      document.getElementById(`message-${index}`)?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function toggleThinking(id) {
+      const el = document.getElementById(id);
+      const btn = el.previousElementSibling;
+      const isExpanded = el.classList.contains('expanded');
+      el.classList.toggle('expanded');
+      btn.setAttribute('aria-expanded', !isExpanded);
+    }
+
+    function toggleToolDetails(id) {
+      const el = document.getElementById(id);
+      el.classList.toggle('expanded');
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      if (sessionData) {
+        renderSession(sessionData);
+      }
+    });
+  </script>
+</body>
+</html>

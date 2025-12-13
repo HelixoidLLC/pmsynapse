@@ -50,7 +50,23 @@ snps dev                     # Start daemon + UI
 snps daemon start            # Daemon only
 snps ui                      # Launch UI
 snps thoughts <command>      # Manage thoughts
+snps claude <command>        # Claude session management
 ```
+
+### Claude Session Commands
+```bash
+snps claude list             # List Claude Code sessions
+snps claude parse <id>       # Parse session (supports partial IDs)
+snps claude convert <json>   # Convert JSON to HTML/Markdown
+snps claude analyze <dir>    # Analyze session hierarchy
+snps claude import           # Batch import sessions to thoughts
+
+# Export formats: json, markdown, html
+snps claude parse <id> --format html -o session.html
+snps claude convert session.json --format html -o output.html
+```
+
+See `docs/CLAUDE_SESSION_PARSER.md` for detailed documentation.
 
 ### Desktop App
 ```bash
