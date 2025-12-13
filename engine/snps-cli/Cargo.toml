@@ -31,6 +31,7 @@ dirs = "5"
 chrono = "0.4"
 hostname = "0.4"
 shellexpand = "3.1"
+walkdir = "2"
 
 [dev-dependencies]
 assert_cmd = "2"

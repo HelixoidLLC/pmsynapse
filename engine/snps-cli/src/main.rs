@@ -7,6 +7,7 @@ use colored::Colorize;
 use snps_core::claude::{SessionAnalyzer, SessionExporter, SessionParser};
 use std::path::{Path, PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use walkdir::WalkDir;
 
 /// PMSynapse CLI - AI-enabled project management
 #[derive(Parser)]
@@ -237,6 +238,10 @@ enum ThoughtsCommands {
         /// Only rebuild searchable index
         #[arg(long)]
         no_commit: bool,
+
+        /// Sync direction: both, to-central, from-central
+        #[arg(long, default_value = "both")]
+        direction: String,
     },
 
     /// Open thoughts directory
@@ -251,6 +256,13 @@ enum ThoughtsCommands {
         /// Open specific scope
         #[arg(long)]
         scope: Option<String>,
+    },
+
+    /// Show thoughts configuration and status
+    Status {
+        /// Show verbose output
+        #[arg(short, long)]
+        verbose: bool,
     },
 
     /// Manage thoughts profiles
@@ -316,7 +328,23 @@ enum ProfileCommands {
 #[derive(Subcommand)]
 enum HooksCommands {
     /// Install git hooks
-    Install,
+    Install {
+        /// Skip pre-commit hook
+        #[arg(long)]
+        no_pre_commit: bool,
+
+        /// Skip post-commit hook
+        #[arg(long)]
+        no_post_commit: bool,
+
+        /// Auto-sync on post-commit (default: false)
+        #[arg(long)]
+        auto_sync: bool,
+
+        /// Force overwrite existing hooks
+        #[arg(short, long)]
+        force: bool,
+    },
     /// Uninstall git hooks
     Uninstall,
     /// Check hook status
@@ -1420,13 +1448,16 @@ fn cmd_thoughts(action: ThoughtsCommands) -> anyhow::Result<()> {
             push,
             pull,
             no_commit,
-        } => thoughts_sync(message, push, pull, no_commit),
+            direction,
+        } => thoughts_sync(message, push, pull, no_commit, direction),
 
         ThoughtsCommands::Open {
             path,
             editor,
             scope,
         } => thoughts_open(path, editor, scope),
+
+        ThoughtsCommands::Status { verbose } => thoughts_status(verbose),
 
         ThoughtsCommands::Profile { action } => thoughts_profile(action),
 
@@ -1550,7 +1581,7 @@ fn thoughts_init(
 
     // Install git hooks
     if !no_hooks {
-        install_thoughts_hooks()?;
+        install_thoughts_hooks(false, true, false, false)?;
     }
 
     // Store configuration
@@ -1869,11 +1900,58 @@ fn thoughts_list(
     Ok(())
 }
 
+/// Rebuild the searchable/ directory with hardlinks to all thought documents.
+/// Uses path-encoded names: shared/research/topic.md -> shared-research-topic.md
+fn rebuild_searchable_index(thoughts_path: &Path) -> anyhow::Result<usize> {
+    let searchable_dir = thoughts_path.join("searchable");
+
+    // Clear and recreate
+    if searchable_dir.exists() {
+        std::fs::remove_dir_all(&searchable_dir)?;
+    }
+    std::fs::create_dir_all(&searchable_dir)?;
+
+    let mut link_count = 0;
+
+    // Walk all directories except searchable/
+    for entry in WalkDir::new(thoughts_path).into_iter().filter_entry(|e| {
+        let name = e.file_name().to_string_lossy();
+        // Skip searchable/, .git/, and hidden files
+        name != "searchable" && name != ".git" && !name.starts_with('.')
+    }) {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Only process markdown files
+        if path.extension().map(|e| e == "md").unwrap_or(false) && path.is_file() {
+            let relative = path.strip_prefix(thoughts_path)?;
+
+            // Create path-encoded link name: shared/research/topic.md -> shared-research-topic.md
+            let link_name = relative.to_string_lossy().replace('/', "-");
+            let link_path = searchable_dir.join(&link_name);
+
+            // Create hardlink (fails silently if source is symlink on some systems)
+            match std::fs::hard_link(path, &link_path) {
+                Ok(()) => link_count += 1,
+                Err(_e) => {
+                    // Try copy as fallback (for symlinked files)
+                    if std::fs::copy(path, &link_path).is_ok() {
+                        link_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(link_count)
+}
+
 fn thoughts_sync(
     message: Option<String>,
     push: bool,
     pull: bool,
     no_commit: bool,
+    direction: String,
 ) -> anyhow::Result<()> {
     let thoughts_path = Path::new("thoughts");
     if !thoughts_path.exists() {
@@ -1886,34 +1964,46 @@ fn thoughts_sync(
 
     println!("{}", "Syncing thoughts...".bright_blue());
 
-    // Resolve symlink to get actual thoughts directory
-    let real_path = std::fs::canonicalize(thoughts_path)?;
+    // Resolve symlink to get actual thoughts directory (central repo)
+    let central_path = std::fs::canonicalize(thoughts_path)?;
 
-    if pull {
-        println!("  Pulling from remote...");
+    // Determine sync direction
+    let sync_from_central = direction == "both" || direction == "from-central";
+    let sync_to_central = direction == "both" || direction == "to-central";
+
+    if sync_from_central && pull {
+        println!("  Pulling from central remote...");
         let output = std::process::Command::new("git")
             .args(["pull"])
-            .current_dir(&real_path)
+            .current_dir(&central_path)
             .output();
 
         if let Ok(out) = output {
             if out.status.success() {
                 println!("{}", "  ✓ Pulled successfully".green());
+            } else {
+                println!("{}", "  ⚠ Pull failed or no remote configured".yellow());
             }
         }
     }
 
     // Rebuild searchable index (hardlinks)
-    let searchable_dir = thoughts_path.join("searchable");
-    if searchable_dir.exists() {
-        std::fs::remove_dir_all(&searchable_dir)?;
+    match rebuild_searchable_index(thoughts_path) {
+        Ok(count) => {
+            println!(
+                "{}",
+                format!("  ✓ Rebuilt searchable index ({} files)", count).green()
+            );
+        }
+        Err(e) => {
+            println!(
+                "{}",
+                format!("  ⚠ Failed to rebuild searchable index: {}", e).yellow()
+            );
+        }
     }
-    // Note: Full hardlink implementation would go here
-    // For now, just create the directory
-    std::fs::create_dir_all(&searchable_dir)?;
-    println!("{}", "  ✓ Rebuilt searchable index".green());
 
-    if !no_commit {
+    if sync_to_central && !no_commit {
         let msg = message.unwrap_or_else(|| {
             format!(
                 "Sync: {} from {}",
@@ -1924,15 +2014,15 @@ fn thoughts_sync(
             )
         });
 
-        // Git add and commit
+        // Git add and commit in central repo
         let _ = std::process::Command::new("git")
             .args(["add", "."])
-            .current_dir(&real_path)
+            .current_dir(&central_path)
             .output();
 
         let output = std::process::Command::new("git")
             .args(["commit", "-m", &msg])
-            .current_dir(&real_path)
+            .current_dir(&central_path)
             .output();
 
         if let Ok(out) = output {
@@ -1944,10 +2034,10 @@ fn thoughts_sync(
         }
 
         if push {
-            println!("  Pushing to remote...");
+            println!("  Pushing to central remote...");
             let output = std::process::Command::new("git")
                 .args(["push"])
-                .current_dir(&real_path)
+                .current_dir(&central_path)
                 .output();
 
             if let Ok(out) = output {
@@ -2011,6 +2101,184 @@ fn thoughts_open(path: Option<String>, editor: bool, scope: Option<String>) -> a
 
         println!("Opening {}...", target.display());
     }
+
+    Ok(())
+}
+
+fn thoughts_status(verbose: bool) -> anyhow::Result<()> {
+    let thoughts_path = Path::new("thoughts");
+
+    println!("{}", "Thoughts Status".bright_blue().bold());
+    println!();
+
+    // Check if initialized
+    if !thoughts_path.exists() {
+        println!("{}", "Status: Not initialized".red());
+        println!();
+        println!("Run 'snps thoughts init' to set up thoughts for this project.");
+        return Ok(());
+    }
+
+    println!("{}", "Status: Initialized ✓".green());
+    println!();
+
+    // Show paths
+    println!("{}", "Paths:".bright_white());
+    println!("  Project symlink: {}", thoughts_path.display());
+
+    if thoughts_path.is_symlink() {
+        match std::fs::read_link(thoughts_path) {
+            Ok(target) => {
+                println!("  Central location: {}", target.display());
+
+                // Check if central path exists
+                let real_path = std::fs::canonicalize(thoughts_path);
+                if let Ok(real) = real_path {
+                    println!("  Resolved path: {}", real.display());
+
+                    // Check git status
+                    let git_dir = real.join(".git");
+                    if git_dir.exists() || real.join("../.git").exists() {
+                        println!("{}", "  Git repo: ✓".green());
+
+                        // Get current branch
+                        let output = std::process::Command::new("git")
+                            .args(["branch", "--show-current"])
+                            .current_dir(&real)
+                            .output();
+                        if let Ok(out) = output {
+                            if out.status.success() {
+                                let branch =
+                                    String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                if !branch.is_empty() {
+                                    println!("  Git branch: {}", branch);
+                                }
+                            }
+                        }
+
+                        // Get remote
+                        let output = std::process::Command::new("git")
+                            .args(["remote", "-v"])
+                            .current_dir(&real)
+                            .output();
+                        if let Ok(out) = output {
+                            if out.status.success() {
+                                let remotes = String::from_utf8_lossy(&out.stdout);
+                                if !remotes.trim().is_empty() {
+                                    println!("{}", "  Remotes:".dimmed());
+                                    for line in remotes.lines().take(2) {
+                                        println!("    {}", line.dimmed());
+                                    }
+                                } else {
+                                    println!("{}", "  No remotes configured".yellow());
+                                }
+                            }
+                        }
+
+                        // Check for uncommitted changes
+                        let output = std::process::Command::new("git")
+                            .args(["status", "--porcelain"])
+                            .current_dir(&real)
+                            .output();
+                        if let Ok(out) = output {
+                            if out.status.success() {
+                                let changes = String::from_utf8_lossy(&out.stdout);
+                                let change_count =
+                                    changes.lines().filter(|l| !l.is_empty()).count();
+                                if change_count > 0 {
+                                    println!(
+                                        "{}",
+                                        format!("  Uncommitted changes: {}", change_count).yellow()
+                                    );
+                                } else {
+                                    println!("{}", "  Working tree: clean ✓".green());
+                                }
+                            }
+                        }
+                    } else {
+                        println!("{}", "  Git repo: Not initialized".yellow());
+                        println!();
+                        println!("  Consider initializing git in your thoughts directory:");
+                        println!("    cd {} && git init", real.display());
+                    }
+                }
+            }
+            Err(e) => println!("{}", format!("  Error reading symlink: {}", e).red()),
+        }
+    } else {
+        println!(
+            "{}",
+            "  Note: thoughts/ is not a symlink (local mode)".dimmed()
+        );
+    }
+
+    println!();
+
+    // Directory structure
+    println!("{}", "Directory Structure:".bright_white());
+    let scopes = ["shared", "global"];
+    for scope in &scopes {
+        let scope_path = thoughts_path.join(scope);
+        if scope_path.exists() {
+            println!("{}", format!("  {}/ ✓", scope).green());
+            if verbose {
+                let subdirs = ["research", "plans", "tickets", "prs"];
+                for subdir in &subdirs {
+                    let sub_path = scope_path.join(subdir);
+                    if sub_path.exists() {
+                        // Count files
+                        let count = std::fs::read_dir(&sub_path)
+                            .map(|d| d.filter(|e| e.is_ok()).count())
+                            .unwrap_or(0);
+                        println!("    {}/ ({} files)", subdir, count);
+                    }
+                }
+            }
+        }
+    }
+
+    // Personal directory
+    let username = get_username();
+    let personal_path = thoughts_path.join(&username);
+    if personal_path.exists() {
+        println!("{}", format!("  {}/ (personal) ✓", username).green());
+    }
+
+    // Searchable index
+    let searchable_path = thoughts_path.join("searchable");
+    if searchable_path.exists() {
+        let count = std::fs::read_dir(&searchable_path)
+            .map(|d| d.filter(|e| e.is_ok()).count())
+            .unwrap_or(0);
+        println!(
+            "{}",
+            format!("  searchable/ ({} hardlinks) ✓", count).green()
+        );
+    } else {
+        println!(
+            "{}",
+            "  searchable/ (not built - run 'snps thoughts sync')".yellow()
+        );
+    }
+
+    println!();
+
+    // Git hooks status
+    println!("{}", "Git Hooks:".bright_white());
+    let pre_commit = Path::new(".git/hooks/pre-commit");
+    if pre_commit.exists() {
+        let content = std::fs::read_to_string(pre_commit).unwrap_or_default();
+        if content.contains("PMSynapse") {
+            println!("{}", "  pre-commit: Installed ✓".green());
+        } else {
+            println!("{}", "  pre-commit: Exists (not PMSynapse)".yellow());
+        }
+    } else {
+        println!("{}", "  pre-commit: Not installed".dimmed());
+        println!("    Run: snps thoughts hooks install");
+    }
+
+    println!();
 
     Ok(())
 }
@@ -2120,13 +2388,23 @@ fn thoughts_profile(action: ProfileCommands) -> anyhow::Result<()> {
 
 fn thoughts_hooks(action: HooksCommands) -> anyhow::Result<()> {
     match action {
-        HooksCommands::Install => install_thoughts_hooks(),
+        HooksCommands::Install {
+            no_pre_commit,
+            no_post_commit,
+            auto_sync,
+            force,
+        } => install_thoughts_hooks(no_pre_commit, no_post_commit, auto_sync, force),
         HooksCommands::Uninstall => uninstall_thoughts_hooks(),
         HooksCommands::Status => check_hooks_status(),
     }
 }
 
-fn install_thoughts_hooks() -> anyhow::Result<()> {
+fn install_thoughts_hooks(
+    no_pre_commit: bool,
+    no_post_commit: bool,
+    auto_sync: bool,
+    force: bool,
+) -> anyhow::Result<()> {
     let hooks_dir = Path::new(".git/hooks");
     if !hooks_dir.exists() {
         println!(
@@ -2136,8 +2414,22 @@ fn install_thoughts_hooks() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let pre_commit = hooks_dir.join("pre-commit");
-    let hook_content = r#"#!/bin/bash
+    if !no_pre_commit {
+        let pre_commit = hooks_dir.join("pre-commit");
+
+        // Check for existing hook
+        if pre_commit.exists() && !force {
+            let existing = std::fs::read_to_string(&pre_commit)?;
+            if !existing.contains("PMSynapse") {
+                println!(
+                    "{}",
+                    "  Pre-commit hook exists. Use --force to overwrite.".yellow()
+                );
+                return Ok(());
+            }
+        }
+
+        let hook_content = r#"#!/bin/bash
 # PMSynapse: Prevent thoughts/ from being committed to code repo
 
 if git diff --cached --name-only | grep -q "^thoughts/"; then
@@ -2160,24 +2452,64 @@ if [ -f .git/hooks/pre-commit.backup ]; then
 fi
 "#;
 
-    // Backup existing hook
-    if pre_commit.exists() {
-        let existing = std::fs::read_to_string(&pre_commit)?;
-        if !existing.contains("PMSynapse") {
-            std::fs::copy(&pre_commit, hooks_dir.join("pre-commit.backup"))?;
+        // Backup existing hook
+        if pre_commit.exists() {
+            let existing = std::fs::read_to_string(&pre_commit)?;
+            if !existing.contains("PMSynapse") {
+                std::fs::copy(&pre_commit, hooks_dir.join("pre-commit.backup"))?;
+            }
         }
+
+        std::fs::write(&pre_commit, hook_content)?;
+
+        // Make executable on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&pre_commit, std::fs::Permissions::from_mode(0o755))?;
+        }
+
+        println!("{}", "  ✓ Installed pre-commit hook".green());
     }
 
-    std::fs::write(&pre_commit, hook_content)?;
+    if !no_post_commit && auto_sync {
+        let post_commit = hooks_dir.join("post-commit");
 
-    // Make executable on Unix
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&pre_commit, std::fs::Permissions::from_mode(0o755))?;
+        let hook_content = r#"#!/bin/bash
+# PMSynapse: Auto-sync thoughts after commit
+
+# Only sync if thoughts directory exists
+if [ -d "thoughts" ]; then
+    snps thoughts sync --no-commit 2>/dev/null || true
+fi
+
+# Continue with any existing post-commit hooks
+if [ -f .git/hooks/post-commit.backup ]; then
+    . .git/hooks/post-commit.backup
+fi
+"#;
+
+        // Backup existing hook
+        if post_commit.exists() {
+            let existing = std::fs::read_to_string(&post_commit)?;
+            if !existing.contains("PMSynapse") {
+                std::fs::copy(&post_commit, hooks_dir.join("post-commit.backup"))?;
+            }
+        }
+
+        std::fs::write(&post_commit, hook_content)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&post_commit, std::fs::Permissions::from_mode(0o755))?;
+        }
+
+        println!(
+            "{}",
+            "  ✓ Installed post-commit hook (auto-sync enabled)".green()
+        );
     }
-
-    println!("{}", "  ✓ Installed pre-commit hook".green());
 
     Ok(())
 }
@@ -2729,13 +3061,17 @@ fn extract_session_info(path: &Path) -> Option<SessionInfo> {
                     .and_then(|m| m.get("content"))
                     .and_then(|c| c.as_array())
                     .map(|arr| {
-                        arr.iter()
-                            .any(|item| item.get("type").and_then(|t| t.as_str()) == Some("tool_result"))
+                        arr.iter().any(|item| {
+                            item.get("type").and_then(|t| t.as_str()) == Some("tool_result")
+                        })
                     })
                     .unwrap_or(false);
 
             // Skip meta messages and tool results
-            let is_meta = record.get("isMeta").and_then(|v| v.as_bool()).unwrap_or(false);
+            let is_meta = record
+                .get("isMeta")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
             if !is_tool_result && !is_meta {
                 message_count += 1;
@@ -2941,11 +3277,7 @@ fn cmd_claude_list(
                 };
 
                 // Extract first 8 chars of session ID for display
-                let session_id_short = session
-                    .session_id
-                    .chars()
-                    .take(8)
-                    .collect::<String>();
+                let session_id_short = session.session_id.chars().take(8).collect::<String>();
 
                 println!("{}{}", agent_marker, title.bright_white());
                 println!(
@@ -3450,7 +3782,10 @@ fn cmd_claude_convert(
             if let Some(output_path) = output {
                 let out_path = PathBuf::from(output_path);
                 exporter.export_markdown(&session, &stats, &out_path)?;
-                println!("{}", format!("✓ Exported to: {}", out_path.display()).green());
+                println!(
+                    "{}",
+                    format!("✓ Exported to: {}", out_path.display()).green()
+                );
             } else {
                 println!(
                     "{}",
@@ -3463,7 +3798,10 @@ fn cmd_claude_convert(
             if let Some(output_path) = output {
                 let out_path = PathBuf::from(output_path);
                 exporter.export_html(&session, &stats, &out_path, None)?;
-                println!("{}", format!("✓ Exported to: {}", out_path.display()).green());
+                println!(
+                    "{}",
+                    format!("✓ Exported to: {}", out_path.display()).green()
+                );
             } else {
                 // Output HTML to stdout
                 let html = exporter.export_html_string(&session, &stats, None);
@@ -3476,7 +3814,9 @@ fn cmd_claude_convert(
 }
 
 /// Convert ThreadData back to Session for re-export
-fn thread_data_to_session(thread_data: &snps_core::claude::ThreadData) -> snps_core::claude::Session {
+fn thread_data_to_session(
+    thread_data: &snps_core::claude::ThreadData,
+) -> snps_core::claude::Session {
     use snps_core::claude::{Message, MessageContent, Session, SessionMetadata};
 
     let messages: Vec<Message> = thread_data

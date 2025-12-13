@@ -73,10 +73,10 @@ my-project/
 │   │   ├── learnings/           # General insights
 │   │   └── templates/           # Document templates
 │   │
-│   └── searchable/              # AI search index (hardlinks)
-│       ├── shared/...
-│       ├── [username]/...
-│       └── global/...
+│   └── searchable/              # AI search index (path-encoded hardlinks)
+│       ├── shared-research-topic.md
+│       ├── shared-plans-feature.md
+│       └── ...
 │
 └── .gitignore                   # Contains: thoughts/
 ```
@@ -101,6 +101,49 @@ my-project/
     ├── patterns/
     ├── learnings/
     └── templates/
+```
+
+## Central Repository Setup
+
+PMSynapse stores thoughts in a central location (`~/.pmsynapse/thoughts/profiles/{profile}/`)
+that is symlinked from your project's `thoughts/` directory.
+
+### Setting Up Git for Your Thoughts
+
+1. **Initialize git in your central thoughts directory:**
+   ```bash
+   cd ~/.pmsynapse/thoughts/profiles/default/
+   git init
+   git add .
+   git commit -m "Initial thoughts setup"
+   ```
+
+2. **Add a remote (optional, for backup/sharing):**
+   ```bash
+   git remote add origin git@github.com:your-org/thoughts-repo.git
+   git push -u origin main
+   ```
+
+3. **Cross-machine sync:**
+   On a new machine, clone your thoughts repo to the central location:
+   ```bash
+   git clone git@github.com:your-org/thoughts-repo.git ~/.pmsynapse/thoughts/profiles/default/
+   ```
+
+### Sync Workflow
+
+```bash
+# In your project directory
+snps thoughts sync --pull --push    # Full bidirectional sync
+snps thoughts sync                  # Commit locally, rebuild index
+snps thoughts sync --direction from-central --pull  # Pull from remote only
+```
+
+### Status Check
+
+```bash
+snps thoughts status           # Check configuration and sync state
+snps thoughts status --verbose # Include file counts per directory
 ```
 
 ## CLI Commands
@@ -203,11 +246,28 @@ Options:
   --push               Push to remote after commit
   --pull               Pull from remote before commit
   --no-commit          Only update searchable/ index
+  --direction <DIR>    Sync direction: both, to-central, from-central (default: both)
 
 Examples:
   snps thoughts sync -m "Updated OAuth research"
   snps thoughts sync --pull --push
   snps thoughts sync --no-commit  # Just rebuild searchable/ index
+  snps thoughts sync --direction from-central --pull  # Pull only
+```
+
+### `snps thoughts status`
+
+Show thoughts configuration and status.
+
+```bash
+snps thoughts status [OPTIONS]
+
+Options:
+  -v, --verbose    Show detailed directory structure with file counts
+
+Examples:
+  snps thoughts status
+  snps thoughts status --verbose
 ```
 
 ### `snps thoughts open`
@@ -260,12 +320,20 @@ Manage git hooks for thoughts protection.
 snps thoughts hooks <COMMAND>
 
 Commands:
-  install                  Install pre-commit hook
-  uninstall                Remove pre-commit hook
+  install                  Install git hooks
+  uninstall                Remove git hooks
   status                   Check hook status
+
+Install Options:
+  --no-pre-commit          Skip pre-commit hook
+  --no-post-commit         Skip post-commit hook
+  --auto-sync              Enable auto-sync on post-commit
+  -f, --force              Force overwrite existing hooks
 
 Examples:
   snps thoughts hooks install
+  snps thoughts hooks install --force
+  snps thoughts hooks install --auto-sync
   snps thoughts hooks status
 ```
 

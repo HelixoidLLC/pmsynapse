@@ -94,8 +94,7 @@ impl SessionExporter {
         let html = self.build_html(session, stats, author);
 
         let mut file = File::create(output_path).map_err(SynapseError::Io)?;
-        file.write_all(html.as_bytes())
-            .map_err(SynapseError::Io)?;
+        file.write_all(html.as_bytes()).map_err(SynapseError::Io)?;
 
         Ok(())
     }
@@ -289,7 +288,12 @@ impl SessionExporter {
     }
 
     /// Build standalone HTML representation (ampcode-style)
-    fn build_html(&self, session: &Session, stats: &SessionStatistics, author: Option<&str>) -> String {
+    fn build_html(
+        &self,
+        session: &Session,
+        stats: &SessionStatistics,
+        author: Option<&str>,
+    ) -> String {
         let title = self.infer_title(session);
         let author_name = author.unwrap_or("User");
         let author_initials: String = author_name

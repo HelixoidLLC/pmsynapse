@@ -55,12 +55,16 @@ thoughts/
 - Search in searchable/ but report corrected paths
 
 ### Path Correction
-**CRITICAL**: If you find files in thoughts/searchable/, report the actual path:
-- `thoughts/searchable/shared/research/api.md` → `thoughts/shared/research/api.md`
-- `thoughts/searchable/allison/tickets/eng_123.md` → `thoughts/allison/tickets/eng_123.md`
-- `thoughts/searchable/global/patterns.md` → `thoughts/global/patterns.md`
+**CRITICAL**: The searchable/ directory uses path-encoded filenames with `-` separators.
 
-Only remove "searchable/" from the path - preserve all other directory structure!
+When you find files in `thoughts/searchable/`, convert the filename back to the actual path:
+- `thoughts/searchable/shared-research-topic.md` → `thoughts/shared/research/topic.md`
+- `thoughts/searchable/allison-tickets-eng_123.md` → `thoughts/allison/tickets/eng_123.md`
+- `thoughts/searchable/global-patterns-api.md` → `thoughts/global/patterns/api.md`
+
+**Conversion rule**: Replace `-` with `/` ONLY for the path segments (shared, global, username, research, plans, tickets, prs). The filename itself keeps its original dashes.
+
+**Pattern**: `searchable/{scope}-{subdir}-{filename}.md` → `{scope}/{subdir}/{filename}.md`
 
 ## Output Format
 
