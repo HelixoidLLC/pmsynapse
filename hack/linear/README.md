@@ -6,7 +6,11 @@ A command-line interface for interacting with Linear issue tracking.
 
 - List your active assigned issues (`list-issues`)
 - View issue details and comments (`get-issue`)
+- Create new issues (`create-issue`)
 - Add comments to issues (`add-comment`)
+- Update issue status (`update-status`)
+- Add links/attachments to issues (`add-link`)
+- Assign issues to yourself (`assign-to-me`)
 - Download all images from issues (`fetch-images`)
 - Automatically detect issue IDs from git branch names
 - Shell completions for fish, zsh, and bash
@@ -38,12 +42,51 @@ linear get-issue ENG-123
 # Or if your git branch contains the issue ID (e.g., feature/ENG-123-something)
 linear get-issue
 
+# Create a new issue
+linear create-issue "Fix bug in authentication flow"  # Interactive team selection
+linear create-issue "Add dark mode support" --team ENG --assignee me --size 3
+linear create-issue "Update documentation" --team ENG --status "In Progress" --description "Update API docs with new endpoints"
+
 # Add a comment to an issue (requires message as first parameter)
 linear add-comment "This is my comment" --issue-id ENG-123  # Explicit ID
 linear add-comment "This is my comment"  # Uses git branch auto-detection
 
 # Download all images from an issue to local thoughts directory
 linear fetch-images ENG-123
+```
+
+### Create Issues
+
+Create new Linear issues with full control over properties:
+
+```bash
+# Basic usage (will prompt for team selection)
+linear create-issue "Fix authentication bug"
+
+# Specify team and other properties
+linear create-issue "Add user dashboard" \
+  --team ENG \
+  --description "Create a new dashboard for user analytics" \
+  --assignee me \
+  --size 5 \
+  --status "Backlog" \
+  --priority 2
+
+# Create a sub-issue
+linear create-issue "Design user dashboard mockups" \
+  --team ENG \
+  --parent ENG-123 \
+  --assignee "John Doe"
+```
+
+Options:
+- `-t, --team <team>` - Team name or key (e.g. 'Engineering' or 'ENG'). If not provided, will prompt interactively.
+- `-d, --description <description>` - Issue description (markdown supported)
+- `-p, --priority <priority>` - Priority level (0-4, where 0 is no priority, 4 is urgent)
+- `-s, --status <status>` - Initial status (e.g. 'Backlog', 'Todo', 'In Progress')
+- `-a, --assignee <assignee>` - Assignee by name, email, or 'me' for yourself
+- `--size <size>` - Estimate/story points (numeric)
+- `--parent <parent>` - Parent issue ID for creating sub-issues (e.g. ENG-123)
 ```
 
 ### Fetch Images

@@ -501,6 +501,176 @@ async function assignToMe(issueId?: string): Promise<void> {
   }
 }
 
+async function createIssue(title: string, options: {
+  team?: string,
+  description?: string,
+  priority?: string,
+  status?: string,
+  assignee?: string,
+  size?: string,
+  parent?: string
+}): Promise<void> {
+  try {
+    if (!linear) {
+      throw new Error("Linear client not initialized. Check your API key.");
+    }
+
+    // Validate title
+    if (!title || title.trim() === '') {
+      console.error(chalk.red("Error: Title is required"));
+      process.exit(1);
+    }
+
+    // Fetch teams
+    const teams = await linear.teams();
+
+    if (!teams.nodes.length) {
+      console.error(chalk.red("Error: No teams found"));
+      process.exit(1);
+    }
+
+    // Select team
+    let selectedTeam;
+    if (options.team) {
+      // Find team by name or key
+      selectedTeam = teams.nodes.find(team =>
+        team.name.toLowerCase() === options.team!.toLowerCase() ||
+        team.key.toLowerCase() === options.team!.toLowerCase()
+      );
+
+      if (!selectedTeam) {
+        console.error(chalk.red(`Error: Team "${options.team}" not found`));
+        console.log(chalk.yellow("\nAvailable teams:"));
+        teams.nodes.forEach(team => {
+          console.log(`  - ${team.name} (${team.key})`);
+        });
+        process.exit(1);
+      }
+    } else {
+      // Interactive team selection
+      const { teamId } = await inquirer.prompt({
+        type: "list",
+        name: "teamId",
+        message: "Select a team:",
+        choices: teams.nodes.map(team => ({
+          name: `${team.name} (${team.key})`,
+          value: team.id
+        }))
+      });
+      selectedTeam = teams.nodes.find(team => team.id === teamId);
+    }
+
+    if (!selectedTeam) {
+      console.error(chalk.red("Error: No team selected"));
+      process.exit(1);
+    }
+
+    // Build issue creation payload
+    const payload: any = {
+      title: title.trim(),
+      teamId: selectedTeam.id
+    };
+
+    // Add description if provided
+    if (options.description) {
+      payload.description = options.description;
+    }
+
+    // Add priority if provided (0-4)
+    if (options.priority) {
+      const priority = parseInt(options.priority, 10);
+      if (isNaN(priority) || priority < 0 || priority > 4) {
+        console.error(chalk.red("Error: Priority must be a number between 0 and 4"));
+        process.exit(1);
+      }
+      payload.priority = priority;
+    }
+
+    // Add status if provided
+    if (options.status) {
+      const states = await selectedTeam.states();
+      const targetState = states.nodes.find(state =>
+        state.name.toLowerCase() === options.status!.toLowerCase()
+      );
+
+      if (!targetState) {
+        console.error(chalk.red(`Error: Status "${options.status}" not found for team ${selectedTeam.name}`));
+        console.log(chalk.yellow("\nAvailable statuses:"));
+        states.nodes.forEach(state => {
+          console.log(`  - ${state.name}`);
+        });
+        process.exit(1);
+      }
+      payload.stateId = targetState.id;
+    }
+
+    // Add assignee if provided
+    if (options.assignee) {
+      if (options.assignee.toLowerCase() === 'me') {
+        const viewer = await linear.viewer;
+        payload.assigneeId = viewer.id;
+      } else {
+        const users = await linear.users();
+        const targetUser = users.nodes.find(user =>
+          user.name.toLowerCase() === options.assignee!.toLowerCase() ||
+          user.email.toLowerCase() === options.assignee!.toLowerCase() ||
+          user.displayName.toLowerCase() === options.assignee!.toLowerCase()
+        );
+
+        if (!targetUser) {
+          console.error(chalk.red(`Error: User "${options.assignee}" not found`));
+          process.exit(1);
+        }
+        payload.assigneeId = targetUser.id;
+      }
+    }
+
+    // Add estimate/size if provided
+    if (options.size) {
+      const estimate = parseInt(options.size, 10);
+      if (isNaN(estimate) || estimate < 0) {
+        console.error(chalk.red("Error: Size must be a positive number"));
+        process.exit(1);
+      }
+      payload.estimate = estimate;
+    }
+
+    // Add parent issue if provided
+    if (options.parent) {
+      const parentId = options.parent.toUpperCase();
+      if (!/^[A-Za-z0-9]+-\d+$/i.test(parentId)) {
+        console.error(chalk.red("Error: Invalid parent issue ID format. Expected format: ENG-123"));
+        process.exit(1);
+      }
+
+      const parentIssue = await linear.issue(parentId);
+      if (!parentIssue) {
+        console.error(chalk.red(`Error: Parent issue ${parentId} not found`));
+        process.exit(1);
+      }
+      payload.parentId = parentIssue.id;
+    }
+
+    // Create the issue
+    const result = await linear.issueCreate(payload);
+
+    if (result.success && result.issue) {
+      const createdIssue = await result.issue;
+      console.log(chalk.green(`✓ Created issue ${createdIssue.identifier}`));
+      console.log(chalk.dim(`  Title: ${createdIssue.title}`));
+      if (createdIssue.url) {
+        console.log(chalk.dim(`  View in Linear: ${createdIssue.url}`));
+      }
+    } else {
+      console.error(chalk.red("Failed to create issue."));
+      process.exit(1);
+    }
+  } catch (error) {
+    console.error(chalk.red("Error creating issue:"), error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
 async function fetchImages(issueId: string): Promise<void> {
   try {
     // Re-initialize Linear client with signed URL headers to get JWT-signed URLs
@@ -1157,6 +1327,18 @@ program
   .action(assignToMe);
 
 program
+  .command("create-issue <title>")
+  .description("Create a new Linear issue")
+  .option("-t, --team <team>", "Team name or key (e.g. 'Engineering' or 'ENG')")
+  .option("-d, --description <description>", "Issue description (markdown supported)")
+  .option("-p, --priority <priority>", "Priority level (0-4, where 0 is no priority)")
+  .option("-s, --status <status>", "Initial status (e.g. 'backlog', 'todo')")
+  .option("-a, --assignee <assignee>", "Assignee (name, email, or 'me')")
+  .option("--size <size>", "Estimate/story points")
+  .option("--parent <parent>", "Parent issue ID for creating sub-issues (e.g. ENG-123)")
+  .action(createIssue);
+
+program
   .command("list-issues")
   .description("List and filter issues with advanced options")
   .option("--max-issues <number>", "Maximum number of issues to fetch", "10")
@@ -1177,7 +1359,7 @@ program
   .option("--zsh", "Generate Zsh completion script")
   .option("--fish", "Generate Fish completion script")
   .action((options) => {
-    const commands = ["my-issues", "list-issues", "get-issue", "get-issue-v2", "add-comment", "fetch-images", "update-status", "add-link", "assign-to-me", "completion", "help"];
+    const commands = ["my-issues", "list-issues", "get-issue", "get-issue-v2", "add-comment", "fetch-images", "update-status", "add-link", "assign-to-me", "create-issue", "completion", "help"];
 
     if (options.bash) {
       // Basic bash completion
@@ -1217,6 +1399,7 @@ _linear() {
     'update-status:Update the status of a Linear issue'
     'add-link:Add a link/attachment to a Linear issue'
     'assign-to-me:Assign an issue to yourself'
+    'create-issue:Create a new Linear issue'
     'completion:Generate shell completion script'
     'help:Display help for command'
   )
@@ -1234,6 +1417,21 @@ _linear() {
         _arguments \\
           '-t[Optional title for the link]:title:' \\
           '--title[Optional title for the link]:title:'
+        ;;
+      create-issue)
+        _arguments \\
+          '-t[Team name or key]:team:' \\
+          '--team[Team name or key]:team:' \\
+          '-d[Issue description]:description:' \\
+          '--description[Issue description]:description:' \\
+          '-p[Priority level (0-4)]:priority:' \\
+          '--priority[Priority level (0-4)]:priority:' \\
+          '-s[Initial status]:status:' \\
+          '--status[Initial status]:status:' \\
+          '-a[Assignee]:assignee:' \\
+          '--assignee[Assignee]:assignee:' \\
+          '--size[Estimate/story points]:size:' \\
+          '--parent[Parent issue ID]:parent:'
         ;;
       get-issue-v2)
         _arguments \\
@@ -1272,6 +1470,7 @@ complete -c linear -n "__fish_use_subcommand" -a "fetch-images" -d "Download all
 complete -c linear -n "__fish_use_subcommand" -a "update-status" -d "Update the status of a Linear issue"
 complete -c linear -n "__fish_use_subcommand" -a "add-link" -d "Add a link/attachment to a Linear issue"
 complete -c linear -n "__fish_use_subcommand" -a "assign-to-me" -d "Assign an issue to yourself"
+complete -c linear -n "__fish_use_subcommand" -a "create-issue" -d "Create a new Linear issue"
 complete -c linear -n "__fish_use_subcommand" -a "completion" -d "Generate shell completion script"
 complete -c linear -n "__fish_use_subcommand" -a "help" -d "Display help for command"
 
@@ -1280,6 +1479,15 @@ complete -c linear -n "__fish_seen_subcommand_from add-comment" -s i -l issue-id
 
 # Options for add-link
 complete -c linear -n "__fish_seen_subcommand_from add-link" -s t -l title -d "Optional title for the link"
+
+# Options for create-issue
+complete -c linear -n "__fish_seen_subcommand_from create-issue" -s t -l team -d "Team name or key"
+complete -c linear -n "__fish_seen_subcommand_from create-issue" -s d -l description -d "Issue description"
+complete -c linear -n "__fish_seen_subcommand_from create-issue" -s p -l priority -d "Priority level (0-4)"
+complete -c linear -n "__fish_seen_subcommand_from create-issue" -s s -l status -d "Initial status"
+complete -c linear -n "__fish_seen_subcommand_from create-issue" -s a -l assignee -d "Assignee (name, email, or 'me')"
+complete -c linear -n "__fish_seen_subcommand_from create-issue" -l size -d "Estimate/story points"
+complete -c linear -n "__fish_seen_subcommand_from create-issue" -l parent -d "Parent issue ID"
 
 # Options for get-issue-v2
 complete -c linear -n "__fish_seen_subcommand_from get-issue-v2" -l output-format -d "Output format" -a "markdown json rich-json"
