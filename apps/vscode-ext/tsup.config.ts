@@ -11,6 +11,11 @@ export default defineConfig({
   clean: true,
   minify: process.env.NODE_ENV === "production",
   sourcemap: process.env.NODE_ENV !== "production",
+  bundle: true,
+  noExternal: [
+    "@pmsynapse/api-client",
+    "@pmsynapse/rpc",
+  ],
   external: [
     "vscode",
     // Node.js built-ins

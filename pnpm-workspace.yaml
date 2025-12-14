@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "apps/vscode-ext/webview-ui"
   - "packages/*"
   # Note: Rust engine crates are managed by Cargo workspace in Cargo.toml
   # but we include engine for any future TS/JS bindings

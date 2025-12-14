@@ -5,6 +5,8 @@
 
 use crate::{Result, SynapseError};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 /// A node in the knowledge graph
@@ -70,6 +72,9 @@ pub enum EdgeType {
 pub struct KnowledgeGraph {
     db_path: String,
     initialized: bool,
+    // Temporary in-memory storage until database is implemented
+    nodes: Arc<Mutex<HashMap<Uuid, Node>>>,
+    edges: Arc<Mutex<HashMap<Uuid, Edge>>>,
 }
 
 impl KnowledgeGraph {
@@ -78,6 +83,8 @@ impl KnowledgeGraph {
         Self {
             db_path: db_path.to_string(),
             initialized: false,
+            nodes: Arc::new(Mutex::new(HashMap::new())),
+            edges: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -99,7 +106,8 @@ impl KnowledgeGraph {
         }
 
         tracing::debug!("Adding node: {:?}", node.id);
-        // TODO: Insert into CozoDB
+        let mut nodes = self.nodes.lock().unwrap();
+        nodes.insert(node.id, node.clone());
         Ok(node.id)
     }
 
@@ -110,7 +118,8 @@ impl KnowledgeGraph {
         }
 
         tracing::debug!("Adding edge: {:?}", edge.id);
-        // TODO: Insert into CozoDB
+        let mut edges = self.edges.lock().unwrap();
+        edges.insert(edge.id, edge.clone());
         Ok(edge.id)
     }
 
@@ -134,6 +143,31 @@ impl KnowledgeGraph {
         tracing::debug!("Finding nodes related to {} at depth {}", node_id, depth);
         // TODO: Recursive query in CozoDB
         Ok(vec![])
+    }
+
+    /// List all nodes
+    pub fn list_nodes(&self) -> Result<Vec<Node>> {
+        if !self.initialized {
+            return Err(SynapseError::Graph("Graph not initialized".into()));
+        }
+
+        tracing::debug!("Listing all nodes");
+        let nodes = self.nodes.lock().unwrap();
+        Ok(nodes.values().cloned().collect())
+    }
+
+    /// Get a specific node by ID
+    pub fn get_node(&self, node_id: &Uuid) -> Result<Node> {
+        if !self.initialized {
+            return Err(SynapseError::Graph("Graph not initialized".into()));
+        }
+
+        tracing::debug!("Getting node: {}", node_id);
+        let nodes = self.nodes.lock().unwrap();
+        nodes
+            .get(node_id)
+            .cloned()
+            .ok_or_else(|| SynapseError::Graph("Node not found".into()))
     }
 }
 

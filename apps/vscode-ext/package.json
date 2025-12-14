@@ -30,9 +30,9 @@
   "contributes": {
     "commands": [
       {
-        "command": "pmsynapse.openPlayground",
-        "title": "PMSynapse: Open Playground",
-        "icon": "$(graph)"
+        "command": "pmsynapse.openDashboard",
+        "title": "PMSynapse: Open Dashboard",
+        "icon": "$(dashboard)"
       },
       {
         "command": "pmsynapse.createIdlcItem",
@@ -95,7 +95,8 @@
     "publish": "vsce publish --no-dependencies"
   },
   "dependencies": {
-    "@pmsynapse/rpc": "workspace:*"
+    "@pmsynapse/rpc": "workspace:*",
+    "@pmsynapse/api-client": "workspace:*"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",

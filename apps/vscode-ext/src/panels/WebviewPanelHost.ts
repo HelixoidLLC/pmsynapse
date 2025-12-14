@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { getUri } from "../utils/getUri";
 import { getNonce } from "../utils/getNonce";
+import type { DaemonClient } from "../daemon-client";
 
 /**
  * WebviewPanelHost manages the webview panel that hosts the PMSynapse UI.
@@ -10,15 +11,24 @@ import { getNonce } from "../utils/getNonce";
  * - In production: loads bundled assets with CSP
  */
 export class WebviewPanelHost {
-  public static readonly viewType = "pmsynapse.playground";
+  public static readonly viewType = "pmsynapse.dashboard";
 
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
+  private readonly _daemonClient: DaemonClient | undefined;
+  private readonly _onRefreshTreeViews: (() => void) | undefined;
   private _disposables: vscode.Disposable[] = [];
   private _onDidDispose: (() => void) | undefined;
 
-  constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
+  constructor(
+    extensionUri: vscode.Uri,
+    context: vscode.ExtensionContext,
+    daemonClient: DaemonClient | undefined,
+    onRefreshTreeViews?: () => void
+  ) {
     this._extensionUri = extensionUri;
+    this._daemonClient = daemonClient;
+    this._onRefreshTreeViews = onRefreshTreeViews;
 
     // Create the webview panel
     this._panel = vscode.window.createWebviewPanel(
@@ -99,10 +109,20 @@ export class WebviewPanelHost {
   /**
    * Handle messages from the webview
    */
-  private _handleMessage(message: { type: string; payload?: unknown }): void {
+  private async _handleMessage(message: { type: string; payload?: unknown; data?: any }): Promise<void> {
     switch (message.type) {
       case "ready":
         console.log("PMSynapse webview is ready");
+        break;
+
+      case "getNodes":
+        await this._getNodes();
+        break;
+
+      case "createNode":
+        if (message.data) {
+          await this._createNode(message.data);
+        }
         break;
 
       case "createIdlcItem":
@@ -133,6 +153,73 @@ export class WebviewPanelHost {
 
       default:
         console.log("Unknown message type:", message.type);
+    }
+  }
+
+  /**
+   * Get nodes from daemon and send to webview
+   */
+  private async _getNodes(): Promise<void> {
+    if (!this._daemonClient) {
+      this._panel.webview.postMessage({
+        type: "error",
+        error: "Daemon not connected",
+      });
+      return;
+    }
+
+    try {
+      const nodes = await this._daemonClient.nodes.list();
+      this._panel.webview.postMessage({
+        type: "nodesData",
+        data: nodes,
+      });
+    } catch (error) {
+      this._panel.webview.postMessage({
+        type: "error",
+        error: String(error),
+      });
+    }
+  }
+
+  /**
+   * Create a node via daemon
+   */
+  private async _createNode(data: { nodeType: string; title: string; content: string }): Promise<void> {
+    if (!this._daemonClient) {
+      this._panel.webview.postMessage({
+        type: "error",
+        error: "Daemon not connected",
+      });
+      return;
+    }
+
+    try {
+      const node = await this._daemonClient.nodes.create({
+        nodeType: data.nodeType as any,
+        title: data.title,
+        content: data.content,
+      });
+
+      console.log("Node created:", node);
+
+      this._panel.webview.postMessage({
+        type: "nodeCreated",
+        data: node,
+      });
+
+      // Give daemon a moment to persist, then refresh sidebar tree views
+      setTimeout(() => {
+        console.log("Refreshing tree views");
+        if (this._onRefreshTreeViews) {
+          this._onRefreshTreeViews();
+        }
+      }, 100);
+    } catch (error) {
+      this._panel.webview.postMessage({
+        type: "error",
+        error: String(error),
+      });
     }
   }
 

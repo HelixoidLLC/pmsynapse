@@ -1,23 +1,60 @@
 import * as vscode from "vscode";
 import { WebviewPanelHost } from "./panels/WebviewPanelHost";
 import { registerCommands } from "./commands";
+import { DaemonClient } from "./daemon-client";
 
 let playgroundPanel: WebviewPanelHost | undefined;
+let daemonClient: DaemonClient | undefined;
+let outputChannel: vscode.OutputChannel;
 
-export function activate(context: vscode.ExtensionContext) {
-  console.log("PMSynapse extension is now active");
+export async function activate(context: vscode.ExtensionContext) {
+  // Create output channel
+  outputChannel = vscode.window.createOutputChannel("PMSynapse");
+  context.subscriptions.push(outputChannel);
+
+  outputChannel.appendLine("PMSynapse extension is now active");
+  outputChannel.show();
+
+  // Initialize daemon client
+  try {
+    outputChannel.appendLine("Connecting to daemon...");
+    daemonClient = await DaemonClient.get_instance();
+    outputChannel.appendLine("✓ Daemon client connected successfully");
+  } catch (error) {
+    const errorMsg = `Failed to connect to PMSynapse daemon: ${error}`;
+    outputChannel.appendLine(`✗ ${errorMsg}`);
+    vscode.window.showErrorMessage(errorMsg);
+    // Continue activation even if daemon fails
+  }
+
+  // Register tree data providers first (so they're available to commands)
+  const idlcTreeProvider = new IdlcTreeProvider(daemonClient);
+  vscode.window.registerTreeDataProvider("pmsynapse.idlcItems", idlcTreeProvider);
+
+  const graphTreeProvider = new KnowledgeGraphTreeProvider(daemonClient);
+  vscode.window.registerTreeDataProvider("pmsynapse.knowledgeGraph", graphTreeProvider);
 
   // Register commands
   registerCommands(context);
 
-  // Register the playground panel command
-  const openPlaygroundCommand = vscode.commands.registerCommand(
-    "pmsynapse.openPlayground",
+  // Register the dashboard panel command
+  const openDashboardCommand = vscode.commands.registerCommand(
+    "pmsynapse.openDashboard",
     () => {
       if (playgroundPanel) {
         playgroundPanel.reveal();
       } else {
-        playgroundPanel = new WebviewPanelHost(context.extensionUri, context);
+        playgroundPanel = new WebviewPanelHost(
+          context.extensionUri,
+          context,
+          daemonClient,
+          () => {
+            // Refresh both tree views when nodes change
+            outputChannel.appendLine("Refreshing tree views from webview callback");
+            idlcTreeProvider.refresh();
+            graphTreeProvider.refresh();
+          }
+        );
         playgroundPanel.onDidDispose(() => {
           playgroundPanel = undefined;
         });
@@ -41,10 +78,33 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         if (title) {
-          vscode.window.showInformationMessage(
-            `Created ${itemType}: ${title}`
-          );
-          // TODO: Send to backend via RPC
+          if (daemonClient) {
+            try {
+              outputChannel.appendLine(`Creating ${itemType}: ${title}`);
+              const node = await daemonClient.nodes.create({
+                nodeType: itemType.toLowerCase() as any,
+                title,
+                content: '',
+              });
+              outputChannel.appendLine(`✓ Created node: ${JSON.stringify(node)}`);
+              vscode.window.showInformationMessage(
+                `Created ${itemType}: ${title}`
+              );
+              // Refresh both tree views
+              idlcTreeProvider.refresh();
+              graphTreeProvider.refresh();
+            } catch (error) {
+              outputChannel.appendLine(`✗ Failed to create ${itemType}: ${error}`);
+              vscode.window.showErrorMessage(
+                `Failed to create ${itemType}: ${error}`
+              );
+            }
+          } else {
+            outputChannel.appendLine("✗ Daemon not connected");
+            vscode.window.showWarningMessage(
+              "Daemon not connected. Item not saved."
+            );
+          }
         }
       }
     }
@@ -57,28 +117,25 @@ export function activate(context: vscode.ExtensionContext) {
       if (playgroundPanel) {
         playgroundPanel.postMessage({ type: "showKnowledgeGraph" });
       } else {
-        vscode.commands.executeCommand("pmsynapse.openPlayground");
+        vscode.commands.executeCommand("pmsynapse.openDashboard");
       }
     }
   );
 
   context.subscriptions.push(
-    openPlaygroundCommand,
+    openDashboardCommand,
     createIdlcItemCommand,
     showKnowledgeGraphCommand
   );
-
-  // Register tree data providers
-  const idlcTreeProvider = new IdlcTreeProvider();
-  vscode.window.registerTreeDataProvider("pmsynapse.idlcItems", idlcTreeProvider);
-
-  const graphTreeProvider = new KnowledgeGraphTreeProvider();
-  vscode.window.registerTreeDataProvider("pmsynapse.knowledgeGraph", graphTreeProvider);
 }
 
 export function deactivate() {
   if (playgroundPanel) {
     playgroundPanel.dispose();
+  }
+
+  if (daemonClient) {
+    daemonClient.dispose();
   }
 }
 
@@ -87,7 +144,10 @@ class IdlcTreeProvider implements vscode.TreeDataProvider<IdlcItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<IdlcItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+  constructor(private client: DaemonClient | undefined) {}
+
   refresh(): void {
+    console.log("IdlcTreeProvider.refresh() called");
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -95,12 +155,25 @@ class IdlcTreeProvider implements vscode.TreeDataProvider<IdlcItem> {
     return element;
   }
 
-  getChildren(_element?: IdlcItem): Thenable<IdlcItem[]> {
-    // TODO: Fetch from backend
-    return Promise.resolve([
-      new IdlcItem("Sample Idea", "idea", vscode.TreeItemCollapsibleState.None),
-      new IdlcItem("Sample Feature", "feature", vscode.TreeItemCollapsibleState.None),
-    ]);
+  async getChildren(_element?: IdlcItem): Promise<IdlcItem[]> {
+    if (!this.client) {
+      return [
+        new IdlcItem("Daemon not connected", "error", vscode.TreeItemCollapsibleState.None),
+      ];
+    }
+
+    try {
+      const nodes = await this.client.nodes.list();
+      return nodes.map(
+        (node) =>
+          new IdlcItem(node.title, node.nodeType, vscode.TreeItemCollapsibleState.None)
+      );
+    } catch (error) {
+      console.error("Failed to fetch nodes:", error);
+      return [
+        new IdlcItem("Failed to load items", "error", vscode.TreeItemCollapsibleState.None),
+      ];
+    }
   }
 }
 
@@ -139,7 +212,10 @@ class KnowledgeGraphTreeProvider implements vscode.TreeDataProvider<GraphNode> {
   private _onDidChangeTreeData = new vscode.EventEmitter<GraphNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+  constructor(private client: DaemonClient | undefined) {}
+
   refresh(): void {
+    console.log("KnowledgeGraphTreeProvider.refresh() called");
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -147,13 +223,46 @@ class KnowledgeGraphTreeProvider implements vscode.TreeDataProvider<GraphNode> {
     return element;
   }
 
-  getChildren(_element?: GraphNode): Thenable<GraphNode[]> {
-    // TODO: Fetch from backend
-    return Promise.resolve([
-      new GraphNode("Ideas", "category", vscode.TreeItemCollapsibleState.Collapsed),
-      new GraphNode("Features", "category", vscode.TreeItemCollapsibleState.Collapsed),
-      new GraphNode("Tasks", "category", vscode.TreeItemCollapsibleState.Collapsed),
-    ]);
+  async getChildren(element?: GraphNode): Promise<GraphNode[]> {
+    if (!this.client) {
+      return [
+        new GraphNode("Daemon not connected", "error", vscode.TreeItemCollapsibleState.None),
+      ];
+    }
+
+    try {
+      const nodes = await this.client.nodes.list();
+
+      // If no element, show grouped types (root level)
+      if (!element) {
+        const typeMap = new Map<string, number>();
+        nodes.forEach((node) => {
+          const count = typeMap.get(node.nodeType) || 0;
+          typeMap.set(node.nodeType, count + 1);
+        });
+
+        return Array.from(typeMap.entries()).map(
+          ([type, count]) =>
+            new GraphNode(
+              `${type} (${count})`,
+              type,
+              vscode.TreeItemCollapsibleState.Collapsed
+            )
+        );
+      }
+
+      // If element provided, show nodes of that type
+      const filteredNodes = nodes.filter((node) => node.nodeType === element.nodeType);
+      return filteredNodes.map(
+        (node) =>
+          new GraphNode(node.title, node.nodeType, vscode.TreeItemCollapsibleState.None)
+      );
+    } catch (error) {
+      console.error("Failed to fetch graph:", error);
+      return [
+        new GraphNode("Failed to load graph", "error", vscode.TreeItemCollapsibleState.None),
+      ];
+    }
   }
 }
 

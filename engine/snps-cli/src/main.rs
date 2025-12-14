@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use walkdir::WalkDir;
 
+mod daemon;
+
 /// PMSynapse CLI - AI-enabled project management
 #[derive(Parser)]
 #[command(name = "snps")]
@@ -913,7 +915,9 @@ fn is_daemon_running(profile: Option<&str>) -> bool {
     }
 
     if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
-        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+        // Handle both "pid" and "pid:port" formats
+        let pid_part = pid_str.split(':').next().unwrap_or(&pid_str);
+        if let Ok(pid) = pid_part.trim().parse::<i32>() {
             // Check if process is running
             #[cfg(unix)]
             {
@@ -934,6 +938,20 @@ fn is_daemon_running(profile: Option<&str>) -> bool {
         }
     }
     false
+}
+
+fn wait_for_health(port: u16) -> anyhow::Result<()> {
+    let client = reqwest::blocking::Client::new();
+    let url = format!("http://127.0.0.1:{}/api/v1/health", port);
+
+    for _ in 0..20 {
+        if client.get(&url).send().is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
+    anyhow::bail!("Daemon did not become healthy")
 }
 
 fn cmd_daemon(action: DaemonCommands) -> anyhow::Result<()> {
@@ -1022,49 +1040,27 @@ fn daemon_start(
         println!("{}", "Running in foreground (Ctrl+C to stop)...".dimmed());
         println!();
 
-        // In foreground mode, we would run the actual daemon here
-        // For now, simulate with a placeholder
-        println!(
-            "{}",
-            "⚠ Daemon not yet implemented - this is a placeholder".yellow()
-        );
-        println!();
-        println!("The daemon will provide:");
-        println!("  • REST API for knowledge graph operations");
-        println!("  • JSON-RPC interface for real-time events");
-        println!("  • WebSocket support for UI communication");
-        println!("  • Session management for AI agents");
+        // Run in foreground (blocking)
+        let runtime = tokio::runtime::Runtime::new()?;
+        let db_path_str = db_path.to_string_lossy().to_string();
+        runtime.block_on(async move {
+            let server = daemon::DaemonServer::new(port)?;
+            let actual_port = server.port();
 
-        // Wait for Ctrl+C
-        println!();
-        println!("{}", "Press Ctrl+C to stop...".dimmed());
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
+            // Write PID file with port info
+            let pid_path = get_daemon_pid_path(profile_ref);
+            std::fs::write(&pid_path, format!("{}:{}", std::process::id(), actual_port))?;
+
+            server.run(&db_path_str).await
+        })
     } else {
-        // Background mode - would fork/spawn daemon process
-        // For now, create a PID file to simulate
-
-        // In a real implementation, we would:
-        // 1. Fork the process (on Unix) or spawn a detached process (on Windows)
-        // 2. Write the child PID to the PID file
-        // 3. Redirect stdout/stderr to log file
-
+        // Background mode - fork and detach
         println!();
         println!("{}", "⚠ Background daemon not yet implemented".yellow());
         println!("  Use --foreground to run in foreground mode");
         println!();
-
-        // Create placeholder PID file for testing
-        // std::fs::write(&pid_path, std::process::id().to_string())?;
-
-        println!("When implemented, daemon will:");
-        println!("  • Run in background automatically");
-        println!("  • Start on system boot (optional)");
-        println!("  • Auto-restart on crash");
+        Ok(())
     }
-
-    Ok(())
 }
 
 fn daemon_stop(force: bool, profile: Option<String>) -> anyhow::Result<()> {
@@ -1229,12 +1225,56 @@ fn cmd_ui(no_daemon: bool, daemon_socket: Option<String>, detach: bool) -> anyho
     println!("{}", "🖥️  Launching PMSynapse UI...".bright_cyan());
     println!();
 
-    // Auto-start daemon if needed
-    if !no_daemon && !is_daemon_running(None) {
-        println!("{}", "Starting daemon...".dimmed());
-        daemon_start(false, daemon_socket.clone(), 7878, None, None)?;
-        std::thread::sleep(std::time::Duration::from_millis(500));
-    }
+    let daemon_port = if !no_daemon {
+        if is_daemon_running(None) {
+            // Daemon already running, read port from PID file
+            let pid_path = get_daemon_pid_path(None);
+            if let Ok(content) = std::fs::read_to_string(&pid_path) {
+                if let Some((_pid, port_str)) = content.split_once(':') {
+                    port_str.parse::<u16>().ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            // Start daemon in background
+            println!("{}", "Starting daemon...".dimmed());
+
+            let mut child = std::process::Command::new(std::env::current_exe()?)
+                .args(["daemon", "start", "--foreground", "--port", "0"])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .spawn()?;
+
+            // Read port from stdout
+            use std::io::BufRead;
+            let stdout = child.stdout.take().expect("Failed to capture stdout");
+            let reader = std::io::BufReader::new(stdout);
+
+            let mut port = None;
+            for line in reader.lines() {
+                let line = line?;
+                if let Some(port_str) = line.strip_prefix("HTTP_PORT=") {
+                    port = Some(port_str.parse()?);
+                    break;
+                }
+            }
+
+            if let Some(p) = port {
+                // Wait for daemon to be ready
+                wait_for_health(p)?;
+                println!("  Daemon started on port {}", p);
+                Some(p)
+            } else {
+                println!("{}", "⚠ Failed to get daemon port".yellow());
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     // Find the desktop app
     let project_root = find_project_root()?;
@@ -1254,6 +1294,9 @@ fn cmd_ui(no_daemon: bool, daemon_socket: Option<String>, detach: bool) -> anyho
 
     println!("  Desktop: {}", desktop_dir.display());
     println!("  Socket:  {}", socket_path);
+    if let Some(port) = daemon_port {
+        println!("  Daemon:  http://127.0.0.1:{}", port);
+    }
     println!();
 
     // Build and run the Tauri app
@@ -1261,6 +1304,10 @@ fn cmd_ui(no_daemon: bool, daemon_socket: Option<String>, detach: bool) -> anyho
     cmd.args(["tauri", "dev"])
         .current_dir(&desktop_dir)
         .env("PMSYNAPSE_DAEMON_SOCKET", &socket_path);
+
+    if let Some(port) = daemon_port {
+        cmd.env("PMSYNAPSE_DAEMON_PORT", port.to_string());
+    }
 
     if detach {
         println!("{}", "Launching in detached mode...".dimmed());

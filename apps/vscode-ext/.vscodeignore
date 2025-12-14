@@ -8,6 +8,15 @@ src/**
 .vscode-test/**
 node_modules/**
 
+# Webview-UI: exclude everything except dist/
+webview-ui/node_modules/**
+webview-ui/src/**
+webview-ui/*.ts
+webview-ui/*.json
+webview-ui/index.html
+webview-ui/.turbo/**
+!webview-ui/dist/**
+
 # Config files
 tsconfig.json
 tsup.config.ts

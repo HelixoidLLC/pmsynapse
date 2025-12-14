@@ -7,24 +7,11 @@ import {
   Clock,
   Plus,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "../components/ui/button";
 
-// Use Tauri's internal invoke - check at runtime
-declare global {
-  interface Window {
-    __TAURI_INTERNALS__?: {
-      invoke: (cmd: string, args?: any) => Promise<any>;
-    };
-  }
-}
-
-// Get invoke function at runtime when Tauri is ready
-const getTauriInvoke = () => {
-  if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__?.invoke) {
-    return window.__TAURI_INTERNALS__.invoke;
-  }
-  throw new Error('Tauri invoke not available - app may not be running in Tauri context');
-};
+// VS Code API
+declare const acquireVsCodeApi: () => any;
+const vscode = acquireVsCodeApi();
 
 const stats = [
   { name: "Total Nodes", value: "0", icon: Network, color: "text-blue-500" },
@@ -45,7 +32,7 @@ const recentActivity = [
 const pendingItems = [
   {
     title: "No pending items",
-    description: "Run 'snps analyze' to get started",
+    description: "Create some nodes to get started",
     icon: Clock,
   },
 ];
@@ -55,59 +42,77 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadNodes = async () => {
+  const load_nodes = async () => {
     try {
       setLoading(true);
       setError(null);
-      const invoke = getTauriInvoke();
-      const result = await invoke('get_knowledge_graph');
-      const parsedNodes = JSON.parse(result);
-      setNodes(parsedNodes);
-      console.log('Loaded nodes:', parsedNodes);
+      vscode.postMessage({ type: 'getNodes' });
     } catch (err: any) {
       setError(err.toString());
       console.error('Failed to load nodes:', err);
-    } finally {
       setLoading(false);
     }
   };
 
-  const createTestNode = async () => {
+  const create_test_node = async () => {
     try {
       setLoading(true);
       setError(null);
-      const invoke = getTauriInvoke();
       const timestamp = new Date().toLocaleTimeString();
       console.log('Creating test node...');
-      const result = await invoke('create_node', {
-        nodeType: 'idea',
-        title: `Test Idea ${timestamp}`,
-        content: 'This is a test node created from the desktop app'
+      vscode.postMessage({
+        type: 'createNode',
+        data: {
+          nodeType: 'idea',
+          title: `Test Idea ${timestamp}`,
+          content: 'This is a test node created from the VS Code webview'
+        }
       });
-      console.log('Node created:', result);
-      // Reload nodes after creation
-      await loadNodes();
     } catch (err: any) {
       setError(err.toString());
       console.error('Failed to create node:', err);
-    } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadNodes();
+    load_nodes();
 
-    // Auto-refresh every 3 seconds to sync with VS Code changes
+    // Listen for messages from extension
+    const handle_message = (event: MessageEvent) => {
+      const message = event.data;
+      switch (message.type) {
+        case 'nodesData':
+          setNodes(message.data);
+          setLoading(false);
+          console.log('Loaded nodes:', message.data);
+          break;
+        case 'error':
+          setError(message.error);
+          setLoading(false);
+          break;
+        case 'nodeCreated':
+          // Reload nodes after creation
+          load_nodes();
+          break;
+      }
+    };
+
+    window.addEventListener('message', handle_message);
+
+    // Auto-refresh every 3 seconds to sync with desktop app changes
     const refresh_interval = setInterval(() => {
-      loadNodes();
+      load_nodes();
     }, 3000);
 
-    return () => clearInterval(refresh_interval);
+    return () => {
+      window.removeEventListener('message', handle_message);
+      clearInterval(refresh_interval);
+    };
   }, []);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 p-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">
@@ -188,14 +193,14 @@ export function DashboardPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={loadNodes}
+              onClick={load_nodes}
               disabled={loading}
             >
               Refresh
             </Button>
             <Button
               size="sm"
-              onClick={createTestNode}
+              onClick={create_test_node}
               disabled={loading}
             >
               <Plus className="h-4 w-4 mr-1" />
