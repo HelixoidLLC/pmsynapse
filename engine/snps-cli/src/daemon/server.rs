@@ -1,4 +1,7 @@
-use axum::{routing::{get, post}, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -40,7 +43,10 @@ impl DaemonServer {
 
         let app = Router::new()
             .route("/api/v1/health", get(handlers::health))
-            .route("/api/v1/nodes", get(handlers::list_nodes).post(handlers::create_node))
+            .route(
+                "/api/v1/nodes",
+                get(handlers::list_nodes).post(handlers::create_node),
+            )
             .route("/api/v1/nodes/:id", get(handlers::get_node))
             .route("/api/v1/edges", post(handlers::create_edge))
             .route("/api/v1/graph/related/:id", get(handlers::get_related))

@@ -1,5 +1,5 @@
-use crate::daemon::state::SharedState;
 use crate::daemon::events::EventType;
+use crate::daemon::state::SharedState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -57,10 +57,9 @@ pub async fn create_node(
     {
         Ok(node) => {
             // Publish event for SSE subscribers
-            state.event_bus.publish(
-                EventType::NodeCreated,
-                serde_json::to_value(&node).unwrap(),
-            );
+            state
+                .event_bus
+                .publish(EventType::NodeCreated, serde_json::to_value(&node).unwrap());
             Ok(Json(node))
         }
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -104,7 +103,9 @@ pub async fn get_related(
 // SSE streaming endpoint
 pub async fn sse_events(
     State(state): State<SharedState>,
-) -> axum::response::Sse<impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {
+) -> axum::response::Sse<
+    impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>,
+> {
     use axum::response::sse::{Event as SseEvent, KeepAlive};
 
     let mut rx = state.event_bus.subscribe();
