@@ -22,8 +22,8 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 
-# Storage - SQLite for MVP
-rusqlite = { workspace = true }
+# Storage - CozoDB
+cozo = { workspace = true }
 
 # LLM integration
 reqwest = { workspace = true }

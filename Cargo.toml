@@ -42,10 +42,10 @@ serde_json = "1"
 anyhow = "1"
 thiserror = "1"
 
-# Storage - using rusqlite for MVP, CozoDB later when dependency issues resolved
-rusqlite = { version = "0.37", features = ["bundled"] }
-# Graph & Vector Database (CozoDB) - temporarily disabled due to dependency conflicts
-# cozo = { version = "0.7", default-features = true }
+# Storage - CozoDB for graph and vector database
+# Full features would be: ["minimal", "requests", "rayon", "graph-algo"]
+# Currently blocked: graph-algo due to graph_builder bug (see COZODB_INTEGRATION.md)
+cozo = { version = "0.7", default-features = false, features = ["minimal", "requests", "rayon"] }
 
 # HTTP Client for LLM APIs
 reqwest = { version = "0.12", features = ["json", "stream"] }
@@ -99,3 +99,4 @@ strip = true
 [profile.dev]
 opt-level = 0
 debug = true
+
