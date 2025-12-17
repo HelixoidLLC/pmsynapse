@@ -46,3 +46,8 @@ walkdir = { workspace = true }
 insta = { workspace = true }
 tokio-test = "0.4"
 tempfile = "3.23"
+cucumber = "0.21"
+
+[[test]]
+name = "cucumber"
+harness = false
