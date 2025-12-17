@@ -15,7 +15,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(db_path: &str) -> anyhow::Result<Self> {
-        let mut graph = KnowledgeGraph::new(db_path);
+        let mut graph = KnowledgeGraph::new(db_path)?;
         graph.init()?;
         Ok(Self {
             graph: Arc::new(graph),

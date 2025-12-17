@@ -4,17 +4,22 @@
 //! are separated from unit tests and placed in the `tests/` directory.
 
 use snps_core::graph::{Edge, EdgeType, KnowledgeGraph, Node, NodeType};
+use tempfile::tempdir;
 use uuid::Uuid;
 
 #[test]
 fn test_graph_initialization() {
-    let mut graph = KnowledgeGraph::new(":memory:");
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let mut graph = KnowledgeGraph::new(db_path.to_str().unwrap()).expect("Failed to create graph");
     assert!(graph.init().is_ok());
 }
 
 #[test]
 fn test_graph_requires_initialization() {
-    let graph = KnowledgeGraph::new(":memory:");
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let graph = KnowledgeGraph::new(db_path.to_str().unwrap()).expect("Failed to create graph");
 
     // Operations should fail on uninitialized graph
     let node = create_test_node(NodeType::Idea, "Test");
@@ -24,7 +29,9 @@ fn test_graph_requires_initialization() {
 
 #[test]
 fn test_add_node() {
-    let mut graph = KnowledgeGraph::new(":memory:");
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let mut graph = KnowledgeGraph::new(db_path.to_str().unwrap()).expect("Failed to create graph");
     graph.init().expect("Failed to init graph");
 
     let node = create_test_node(NodeType::Feature, "Test Feature");
@@ -35,7 +42,9 @@ fn test_add_node() {
 
 #[test]
 fn test_add_edge() {
-    let mut graph = KnowledgeGraph::new(":memory:");
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let mut graph = KnowledgeGraph::new(db_path.to_str().unwrap()).expect("Failed to create graph");
     graph.init().expect("Failed to init graph");
 
     let node1 = create_test_node(NodeType::Feature, "Feature A");
@@ -51,7 +60,9 @@ fn test_add_edge() {
 
 #[test]
 fn test_query_by_type() {
-    let mut graph = KnowledgeGraph::new(":memory:");
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let mut graph = KnowledgeGraph::new(db_path.to_str().unwrap()).expect("Failed to create graph");
     graph.init().expect("Failed to init graph");
 
     // Add some nodes
@@ -63,27 +74,36 @@ fn test_query_by_type() {
     graph.add_node(&task2).expect("Failed to add task 2");
     graph.add_node(&feature).expect("Failed to add feature");
 
-    // Query tasks - currently returns empty (placeholder impl)
+    // Query tasks should return the two tasks we added
     let tasks = graph
         .query_by_type(&NodeType::Task)
         .expect("Failed to query");
-    // The current implementation returns empty vec (placeholder)
-    assert!(tasks.is_empty());
+    assert_eq!(tasks.len(), 2);
 }
 
 #[test]
 fn test_find_related() {
-    let mut graph = KnowledgeGraph::new(":memory:");
+    let temp_dir = tempdir().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let mut graph = KnowledgeGraph::new(db_path.to_str().unwrap()).expect("Failed to create graph");
     graph.init().expect("Failed to init graph");
 
-    let node = create_test_node(NodeType::Idea, "Test Idea");
-    graph.add_node(&node).expect("Failed to add node");
+    let node1 = create_test_node(NodeType::Idea, "Test Idea");
+    let node2 = create_test_node(NodeType::Task, "Related Task");
 
-    // Find related - currently returns empty (placeholder impl)
+    graph.add_node(&node1).expect("Failed to add node 1");
+    graph.add_node(&node2).expect("Failed to add node 2");
+
+    // Add edge from node1 to node2
+    let edge = create_test_edge(node1.id, node2.id, EdgeType::Inspires);
+    graph.add_edge(&edge).expect("Failed to add edge");
+
+    // Find related should return node2
     let related = graph
-        .find_related(node.id, 1)
+        .find_related(node1.id, 1)
         .expect("Failed to find related");
-    assert!(related.is_empty());
+    assert_eq!(related.len(), 1);
+    assert_eq!(related[0].id, node2.id);
 }
 
 #[test]

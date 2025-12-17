@@ -4,7 +4,12 @@
 
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
+use serde::{Deserialize, Serialize};
 use snps_core::claude::{SessionAnalyzer, SessionExporter, SessionParser};
+use snps_core::config::load_global_config;
+use snps_core::index::MatterIndex;
+use snps_core::matter::{generate_matter_path, MatterFrontmatter, MatterItem, MatterType};
+use snps_core::repository::load_repositories;
 use std::path::{Path, PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use walkdir::WalkDir;
@@ -136,6 +141,24 @@ enum Commands {
     Claude {
         #[command(subcommand)]
         action: ClaudeCommands,
+    },
+
+    /// Manage configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigCommands,
+    },
+
+    /// Manage knowledge matter
+    Matter {
+        #[command(subcommand)]
+        action: MatterCommands,
+    },
+
+    /// Manage matter repositories
+    Repo {
+        #[command(subcommand)]
+        action: RepoCommands,
     },
 }
 
@@ -596,6 +619,198 @@ enum ClaudeExportFormat {
     Html,
 }
 
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// Show merged configuration
+    Show {
+        /// Show source for each setting
+        #[arg(long)]
+        source: bool,
+        /// Team ID for context
+        #[arg(long)]
+        team: Option<String>,
+        /// Project ID for context
+        #[arg(long)]
+        project: Option<String>,
+    },
+
+    /// Sync config from shadow repo
+    Sync {
+        /// Project to sync
+        #[arg(long)]
+        project: Option<String>,
+        /// Sync all projects
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Push config changes to shadow repo
+    Push {
+        /// Push team-level changes
+        #[arg(long)]
+        team: bool,
+    },
+
+    /// Initialize config for current context
+    Init {
+        /// Context type (user, team, project)
+        #[arg(long)]
+        context: String,
+        /// Context ID
+        #[arg(long)]
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum MatterCommands {
+    /// Create new matter item
+    Create {
+        /// Matter type (spec, document, research, plan, insight)
+        matter_type: String,
+        /// Title of the matter item
+        title: String,
+        /// Context type (user, team, project)
+        #[arg(long, default_value = "user")]
+        context: String,
+        /// Context ID
+        #[arg(long)]
+        id: Option<String>,
+        /// Tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
+        /// Visibility (private, shared)
+        #[arg(long, default_value = "private")]
+        visibility: String,
+    },
+
+    /// List matter items
+    List {
+        /// Filter by context type
+        #[arg(long)]
+        context: Option<String>,
+        /// Filter by context ID
+        #[arg(long)]
+        id: Option<String>,
+        /// Filter by matter type
+        #[arg(long, short = 't')]
+        matter_type: Option<String>,
+        /// Filter by visibility
+        #[arg(long)]
+        visibility: Option<String>,
+        /// Maximum results
+        #[arg(long, default_value = "50")]
+        limit: usize,
+    },
+
+    /// Search matter items
+    Search {
+        /// Search query
+        query: String,
+        /// Filter by context
+        #[arg(long)]
+        context: Option<String>,
+        /// Filter by type
+        #[arg(long, short = 't')]
+        matter_type: Option<String>,
+        /// Filter by tags
+        #[arg(long)]
+        tags: Option<String>,
+        /// Maximum results
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Show matter item details
+    Show {
+        /// Matter ID or file path
+        matter_id: String,
+    },
+
+    /// Edit matter item
+    Edit {
+        /// Matter ID or file path
+        matter_id: String,
+    },
+
+    /// Delete matter item
+    Delete {
+        /// Matter ID or file path
+        matter_id: String,
+        /// Skip confirmation
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Import matter from file
+    Import {
+        /// File to import
+        file: PathBuf,
+        /// Matter type to assign
+        #[arg(long)]
+        matter_type: Option<String>,
+        /// Context for imported matter
+        #[arg(long)]
+        context: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum RepoCommands {
+    /// Initialize new matter repository
+    Init {
+        /// Repository path
+        path: PathBuf,
+        /// Context type (user, team, project)
+        #[arg(long)]
+        context: String,
+        /// Context ID
+        #[arg(long)]
+        id: String,
+        /// Owner type for projects
+        #[arg(long)]
+        owner_type: Option<String>,
+        /// Owner ID for projects
+        #[arg(long)]
+        owner_id: Option<String>,
+    },
+
+    /// Clone remote repository
+    Clone {
+        /// Remote URL
+        url: String,
+        /// Local path
+        path: Option<PathBuf>,
+    },
+
+    /// Add existing repository
+    Add {
+        /// Repository path
+        path: PathBuf,
+    },
+
+    /// Remove repository from config
+    Remove {
+        /// Repository ID
+        id: String,
+    },
+
+    /// List configured repositories
+    List,
+
+    /// Sync repository with remote
+    Sync {
+        /// Repository ID (optional, syncs all if omitted)
+        id: Option<String>,
+    },
+
+    /// Rebuild repository index
+    Index {
+        /// Repository ID (optional, rebuilds all if omitted)
+        id: Option<String>,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
@@ -646,6 +861,9 @@ fn main() -> anyhow::Result<()> {
             port,
         } => cmd_dev(profile, daemon_only, ui_only, port),
         Commands::Claude { action } => cmd_claude(action),
+        Commands::Config { action } => cmd_config(action),
+        Commands::Matter { action } => cmd_matter(action),
+        Commands::Repo { action } => cmd_repo(action),
     }
 }
 
@@ -3906,4 +4124,1058 @@ fn thread_data_to_session(
         messages,
         child_agents: thread_data.child_agents.clone(),
     }
+}
+
+fn cmd_config(action: ConfigCommands) -> anyhow::Result<()> {
+    match action {
+        ConfigCommands::Show { source, team, project } => {
+            config_show(source, team.as_deref(), project.as_deref())
+        }
+        ConfigCommands::Sync { project, all } => {
+            config_sync(project.as_deref(), all)
+        }
+        ConfigCommands::Push { team } => {
+            config_push(team)
+        }
+        ConfigCommands::Init { context, id } => {
+            config_init(&context, &id)
+        }
+    }
+}
+
+fn config_show(show_source: bool, team_id: Option<&str>, project_id: Option<&str>) -> anyhow::Result<()> {
+    use snps_core::config::load_merged_config;
+
+    println!("{}", "Loading configuration...".bright_blue());
+
+    let merged = load_merged_config(team_id, project_id)?;
+    let config = &merged.config;
+
+    println!("\n{}", "Configuration:".bright_green().bold());
+    println!("{}", "═".repeat(60).bright_green());
+
+    if show_source {
+        println!("\n{}", "[Version]".bright_yellow());
+        println!("  version: {} ({})", config.version, merged.sources.get("version").map(|s| s.to_string()).unwrap_or_default());
+
+        println!("\n{}", "[Repositories]".bright_yellow());
+        println!("  repositories_root: {} ({})", config.repositories_root.display(), merged.sources.get("repositories_root").map(|s| s.to_string()).unwrap_or_default());
+
+        println!("\n{}", "[Defaults]".bright_yellow());
+        println!("  editor: {} ({})", config.defaults.editor, merged.sources.get("defaults.editor").map(|s| s.to_string()).unwrap_or_default());
+        println!("  matter_type: {} ({})", config.defaults.matter_type, merged.sources.get("defaults.matter_type").map(|s| s.to_string()).unwrap_or_default());
+        println!("  visibility: {} ({})", config.defaults.visibility, merged.sources.get("defaults.visibility").map(|s| s.to_string()).unwrap_or_default());
+
+        println!("\n{}", "[User]".bright_yellow());
+        println!("  id: {} ({})", config.user.id, merged.sources.get("user.id").map(|s| s.to_string()).unwrap_or_default());
+        println!("  name: {} ({})", config.user.name, merged.sources.get("user.name").map(|s| s.to_string()).unwrap_or_default());
+        println!("  email: {} ({})", config.user.email, merged.sources.get("user.email").map(|s| s.to_string()).unwrap_or_default());
+
+        println!("\n{}", "[Search]".bright_yellow());
+        println!("  index_enabled: {} ({})", config.search.index_enabled, merged.sources.get("search.index_enabled").map(|s| s.to_string()).unwrap_or_default());
+        println!("  index_db: {} ({})", config.search.index_db.display(), merged.sources.get("search.index_db").map(|s| s.to_string()).unwrap_or_default());
+        println!("  watch_for_changes: {} ({})", config.search.watch_for_changes, merged.sources.get("search.watch_for_changes").map(|s| s.to_string()).unwrap_or_default());
+        println!("  exclude_patterns: {:?} ({})", config.search.exclude_patterns, merged.sources.get("search.exclude_patterns").map(|s| s.to_string()).unwrap_or_default());
+
+        println!("\n{}", "[Sync]".bright_yellow());
+        println!("  auto_sync: {} ({})", config.sync.auto_sync, merged.sources.get("sync.auto_sync").map(|s| s.to_string()).unwrap_or_default());
+        println!("  sync_interval_minutes: {} ({})", config.sync.sync_interval_minutes, merged.sources.get("sync.sync_interval_minutes").map(|s| s.to_string()).unwrap_or_default());
+        println!("  remote_portal_url: {:?} ({})", config.sync.remote_portal_url, merged.sources.get("sync.remote_portal_url").map(|s| s.to_string()).unwrap_or_default());
+    } else {
+        println!("\n{}", "[Version]".bright_yellow());
+        println!("  version: {}", config.version);
+
+        println!("\n{}", "[Repositories]".bright_yellow());
+        println!("  repositories_root: {}", config.repositories_root.display());
+
+        println!("\n{}", "[Defaults]".bright_yellow());
+        println!("  editor: {}", config.defaults.editor);
+        println!("  matter_type: {}", config.defaults.matter_type);
+        println!("  visibility: {}", config.defaults.visibility);
+
+        println!("\n{}", "[User]".bright_yellow());
+        println!("  id: {}", config.user.id);
+        println!("  name: {}", config.user.name);
+        println!("  email: {}", config.user.email);
+
+        println!("\n{}", "[Search]".bright_yellow());
+        println!("  index_enabled: {}", config.search.index_enabled);
+        println!("  index_db: {}", config.search.index_db.display());
+        println!("  watch_for_changes: {}", config.search.watch_for_changes);
+        println!("  exclude_patterns: {:?}", config.search.exclude_patterns);
+
+        println!("\n{}", "[Sync]".bright_yellow());
+        println!("  auto_sync: {}", config.sync.auto_sync);
+        println!("  sync_interval_minutes: {}", config.sync.sync_interval_minutes);
+        println!("  remote_portal_url: {:?}", config.sync.remote_portal_url);
+    }
+
+    println!();
+    if !show_source {
+        println!("{}", "Tip: Use --source to see where each setting comes from".bright_black());
+    }
+
+    Ok(())
+}
+
+fn config_sync(_project: Option<&str>, _all: bool) -> anyhow::Result<()> {
+    println!("{}", "Config sync not yet implemented".yellow());
+    println!("This will sync configuration from shadow repository");
+    Ok(())
+}
+
+fn config_push(_team: bool) -> anyhow::Result<()> {
+    println!("{}", "Config push not yet implemented".yellow());
+    println!("This will push configuration changes to shadow repository");
+    Ok(())
+}
+
+fn config_init(context: &str, id: &str) -> anyhow::Result<()> {
+    use snps_core::config::{get_pmsynapse_global_dir, GlobalConfig, save_global_config};
+
+    println!("{}", format!("Initializing config for {} context: {}", context, id).bright_blue());
+
+    let config_dir = match context {
+        "user" | "personal" => get_pmsynapse_global_dir(),
+        "team" => get_pmsynapse_global_dir().join("teams").join(id),
+        "project" => {
+            println!("{}", "Project config requires --team flag".red());
+            return Err(anyhow::anyhow!("Project config requires team context"));
+        }
+        _ => {
+            println!("{}", format!("Unknown context type: {}", context).red());
+            return Err(anyhow::anyhow!("Unknown context type"));
+        }
+    };
+
+    std::fs::create_dir_all(&config_dir)?;
+    let config_path = config_dir.join("config.yaml");
+
+    if config_path.exists() {
+        println!("{}", format!("Config already exists at: {}", config_path.display()).yellow());
+        return Ok(());
+    }
+
+    let default_config = GlobalConfig::default();
+    save_global_config(&default_config)?;
+
+    println!("{}", format!("✓ Created config at: {}", config_path.display()).green());
+
+    Ok(())
+}
+
+fn cmd_matter(action: MatterCommands) -> anyhow::Result<()> {
+    match action {
+        MatterCommands::Create { matter_type, title, context, id, tags, visibility } => {
+            matter_create(&matter_type, &title, &context, id.as_deref(), tags.as_deref(), &visibility)
+        }
+        MatterCommands::List { context, id, matter_type, visibility, limit } => {
+            matter_list(context.as_deref(), id.as_deref(), matter_type.as_deref(), visibility.as_deref(), limit)
+        }
+        MatterCommands::Search { query, context, matter_type, tags, limit } => {
+            matter_search(&query, context.as_deref(), matter_type.as_deref(), tags.as_deref(), limit)
+        }
+        MatterCommands::Show { matter_id } => matter_show(&matter_id),
+        MatterCommands::Edit { matter_id } => matter_edit(&matter_id),
+        MatterCommands::Delete { matter_id, force } => matter_delete(&matter_id, force),
+        MatterCommands::Import { file, matter_type, context } => {
+            matter_import(&file, matter_type.as_deref(), context.as_deref())
+        }
+    }
+}
+
+fn cmd_repo(action: RepoCommands) -> anyhow::Result<()> {
+    match action {
+        RepoCommands::Init { path, context, id, owner_type, owner_id } => {
+            repo_init(&path, &context, &id, owner_type.as_deref(), owner_id.as_deref())
+        }
+        RepoCommands::Clone { url, path } => {
+            repo_clone(&url, path.as_ref())
+        }
+        RepoCommands::Add { path } => {
+            repo_add(&path)
+        }
+        RepoCommands::Remove { id } => {
+            repo_remove(&id)
+        }
+        RepoCommands::List => {
+            repo_list()
+        }
+        RepoCommands::Sync { id } => {
+            repo_sync(id.as_deref())
+        }
+        RepoCommands::Index { id } => {
+            repo_index(id.as_deref())
+        }
+    }
+}
+
+fn matter_create(
+    matter_type: &str,
+    title: &str,
+    context: &str,
+    id: Option<&str>,
+    tags: Option<&str>,
+    visibility: &str,
+) -> anyhow::Result<()> {
+    println!("{}", "Creating matter item...".bright_green());
+
+    // Parse matter type
+    let matter_type: MatterType = serde_json::from_str(&format!("\"{}\"", matter_type))
+        .map_err(|e| anyhow::anyhow!("Invalid matter type '{}': {}", matter_type, e))?;
+
+    // Parse context type
+    let context_type: snps_core::matter::ContextType = serde_json::from_str(&format!("\"{}\"", context))
+        .map_err(|e| anyhow::anyhow!("Invalid context type '{}': {}", context, e))?;
+
+    // Parse visibility
+    let visibility: snps_core::matter::Visibility = serde_json::from_str(&format!("\"{}\"", visibility))
+        .map_err(|e| anyhow::anyhow!("Invalid visibility '{}': {}", visibility, e))?;
+
+    // Get global config for defaults
+    let config = load_global_config()?;
+
+    // Determine repository based on context
+    let repositories = load_repositories()?;
+    let repo = repositories
+        .repositories
+        .iter()
+        .find(|r| {
+            let repo_context = serde_json::to_string(&r.context_type).unwrap().trim_matches('"').to_string();
+            repo_context == context && (id.is_none() || r.context_id == id.unwrap_or(""))
+        })
+        .ok_or_else(|| anyhow::anyhow!("No repository found for context: {}", context))?;
+
+    // Generate file path
+    let file_path = generate_matter_path(&repo.path, &matter_type, title, &visibility);
+
+    // Parse tags
+    let tags: Vec<String> = tags
+        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
+
+    // Create frontmatter
+    let frontmatter = MatterFrontmatter {
+        matter_type,
+        title: title.to_string(),
+        context_type,
+        context_id: id.unwrap_or(&config.user.id).to_string(),
+        visibility,
+        tags,
+        created_at: chrono::Utc::now(),
+        created_by: config.user.name.clone(),
+        updated_at: None,
+        updated_by: None,
+        version: Some(1),
+        status: Some("draft".to_string()),
+        folder_path: None,
+    };
+
+    // Create matter item
+    let matter = MatterItem {
+        frontmatter,
+        content: format!("# {}\n\n<!-- Start writing your content here -->\n", title),
+        file_path: file_path.clone(),
+    };
+
+    // Save to disk
+    matter.save()?;
+
+    println!("{}", format!("✓ Created matter file at: {}", file_path.display()).green());
+
+    // Index the file
+    let index_db = config.search.index_db;
+    if config.search.index_enabled {
+        if let Ok(index) = MatterIndex::new(index_db.to_str().unwrap()) {
+            if let Err(e) = index.index_file(&file_path) {
+                eprintln!("{}", format!("⚠ Failed to index file: {}", e).yellow());
+            } else {
+                println!("{}", "✓ Indexed matter file".green());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn matter_list(
+    context: Option<&str>,
+    id: Option<&str>,
+    matter_type: Option<&str>,
+    visibility: Option<&str>,
+    limit: usize,
+) -> anyhow::Result<()> {
+    println!("{}", "Listing matter items...".bright_green());
+
+    // Load repositories
+    let repositories = load_repositories()?;
+
+    // Filter repositories based on context
+    let filtered_repos: Vec<_> = repositories
+        .repositories
+        .iter()
+        .filter(|r| {
+            context.map_or(true, |c| {
+                serde_json::to_string(&r.context_type).unwrap().trim_matches('"') == c
+            }) && id.map_or(true, |i| r.context_id == i)
+        })
+        .collect();
+
+    if filtered_repos.is_empty() {
+        println!("{}", "No repositories found matching criteria".yellow());
+        return Ok(());
+    }
+
+    let mut count = 0;
+    for repo in filtered_repos {
+        println!("\n{}", format!("Repository: {}", repo.path.display()).bright_cyan());
+
+        // Walk the repository and find matter files
+        for entry in walkdir::WalkDir::new(&repo.path)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|e| {
+                !e.path()
+                    .components()
+                    .any(|c| c.as_os_str() == ".git" || c.as_os_str() == "node_modules")
+            })
+        {
+            if count >= limit {
+                break;
+            }
+
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                if let Some(ext) = entry.path().extension() {
+                    if ext == "md" {
+                        if let Ok(matter) = MatterItem::parse_file(&entry.path().to_path_buf()) {
+                            // Apply filters
+                            if let Some(mt) = matter_type {
+                                let mt_parsed: MatterType = serde_json::from_str(&format!("\"{}\"", mt))?;
+                                if matter.frontmatter.matter_type != mt_parsed {
+                                    continue;
+                                }
+                            }
+
+                            if let Some(vis) = visibility {
+                                let vis_parsed: snps_core::matter::Visibility = serde_json::from_str(&format!("\"{}\"", vis))?;
+                                if matter.frontmatter.visibility != vis_parsed {
+                                    continue;
+                                }
+                            }
+
+                            // Display matter item
+                            println!(
+                                "  {} - {} ({})",
+                                matter.frontmatter.title.bright_white(),
+                                serde_json::to_string(&matter.frontmatter.matter_type)?.trim_matches('"').cyan(),
+                                entry.path().strip_prefix(&repo.path).unwrap().display()
+                            );
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!("\n{}", format!("Found {} matter items", count).bright_green());
+    Ok(())
+}
+
+fn matter_search(
+    query: &str,
+    _context: Option<&str>,
+    _matter_type: Option<&str>,
+    _tags: Option<&str>,
+    limit: usize,
+) -> anyhow::Result<()> {
+    println!("{}", format!("Searching for: {}", query).bright_green());
+
+    let config = load_global_config()?;
+    let index_db = config.search.index_db;
+
+    if !config.search.index_enabled {
+        println!("{}", "⚠ Search index is disabled. Enable it in config.".yellow());
+        return Ok(());
+    }
+
+    let index = MatterIndex::new(index_db.to_str().unwrap())?;
+    let results = index.search(query)?;
+
+    println!("{}", format!("Found {} results:", results.len()).bright_cyan());
+
+    for (i, result) in results.iter().take(limit).enumerate() {
+        println!(
+            "\n{}. {} ({})",
+            i + 1,
+            result.title.bright_white(),
+            serde_json::to_string(&result.matter_type)?.trim_matches('"').cyan()
+        );
+        println!("   Path: {}", result.file_path.display());
+        println!("   Tags: {}", result.tags.join(", "));
+        println!("   Created: {}", result.created_at.format("%Y-%m-%d %H:%M"));
+    }
+
+    Ok(())
+}
+
+fn matter_show(matter_id: &str) -> anyhow::Result<()> {
+    let path = PathBuf::from(matter_id);
+
+    if !path.exists() {
+        return Err(anyhow::anyhow!("Matter file not found: {}", matter_id));
+    }
+
+    let matter = MatterItem::parse_file(&path)?;
+
+    println!("{}", "─".repeat(80).bright_cyan());
+    println!("{}", matter.frontmatter.title.bright_white().bold());
+    println!("{}", "─".repeat(80).bright_cyan());
+    println!(
+        "Type: {}",
+        serde_json::to_string(&matter.frontmatter.matter_type)?.trim_matches('"')
+    );
+    println!(
+        "Context: {} / {}",
+        serde_json::to_string(&matter.frontmatter.context_type)?.trim_matches('"'),
+        matter.frontmatter.context_id
+    );
+    println!(
+        "Visibility: {}",
+        serde_json::to_string(&matter.frontmatter.visibility)?.trim_matches('"')
+    );
+    println!("Tags: {}", matter.frontmatter.tags.join(", "));
+    println!("Created: {} by {}", matter.frontmatter.created_at.format("%Y-%m-%d %H:%M"), matter.frontmatter.created_by);
+    if let Some(updated_at) = matter.frontmatter.updated_at {
+        println!("Updated: {}", updated_at.format("%Y-%m-%d %H:%M"));
+    }
+    println!("{}", "─".repeat(80).bright_cyan());
+    println!("\n{}", matter.content);
+
+    Ok(())
+}
+
+fn matter_edit(matter_id: &str) -> anyhow::Result<()> {
+    let path = PathBuf::from(matter_id);
+
+    if !path.exists() {
+        return Err(anyhow::anyhow!("Matter file not found: {}", matter_id));
+    }
+
+    let config = load_global_config()?;
+    let editor = std::env::var("EDITOR").unwrap_or(config.defaults.editor);
+
+    println!("{}", format!("Opening in {}...", editor).bright_green());
+
+    let status = std::process::Command::new(&editor)
+        .arg(&path)
+        .status()?;
+
+    if status.success() {
+        println!("{}", "✓ File edited successfully".green());
+
+        // Re-index if enabled
+        if config.search.index_enabled {
+            let index_db = config.search.index_db;
+            if let Ok(index) = MatterIndex::new(index_db.to_str().unwrap()) {
+                if let Err(e) = index.index_file(&path) {
+                    eprintln!("{}", format!("⚠ Failed to re-index file: {}", e).yellow());
+                } else {
+                    println!("{}", "✓ Re-indexed matter file".green());
+                }
+            }
+        }
+    } else {
+        return Err(anyhow::anyhow!("Editor exited with error"));
+    }
+
+    Ok(())
+}
+
+fn matter_delete(matter_id: &str, force: bool) -> anyhow::Result<()> {
+    let path = PathBuf::from(matter_id);
+
+    if !path.exists() {
+        return Err(anyhow::anyhow!("Matter file not found: {}", matter_id));
+    }
+
+    if !force {
+        print!("{}", "Are you sure you want to delete this file? (y/N): ".yellow());
+        use std::io::{self, Write};
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("{}", "Cancelled".yellow());
+            return Ok(());
+        }
+    }
+
+    // Remove from index first
+    let config = load_global_config()?;
+    if config.search.index_enabled {
+        let index_db = config.search.index_db;
+        if let Ok(index) = MatterIndex::new(index_db.to_str().unwrap()) {
+            if let Err(e) = index.remove_from_index(&path) {
+                eprintln!("{}", format!("⚠ Failed to remove from index: {}", e).yellow());
+            }
+        }
+    }
+
+    // Delete file
+    std::fs::remove_file(&path)?;
+    println!("{}", format!("✓ Deleted: {}", path.display()).green());
+
+    Ok(())
+}
+
+fn matter_import(
+    file: &Path,
+    matter_type: Option<&str>,
+    context: Option<&str>,
+) -> anyhow::Result<()> {
+    println!("{}", format!("Importing: {}", file.display()).bright_green());
+
+    if !file.exists() {
+        return Err(anyhow::anyhow!("File not found: {}", file.display()));
+    }
+
+    // Try to parse as existing matter file
+    if let Ok(matter) = MatterItem::parse_file(&file.to_path_buf()) {
+        println!("{}", "File already has valid frontmatter, copying as-is...".cyan());
+
+        // Determine target repository
+        let repositories = load_repositories()?;
+        let context_str = context.unwrap_or("user");
+
+        let repo = repositories
+            .repositories
+            .iter()
+            .find(|r| {
+                let repo_context = serde_json::to_string(&r.context_type).unwrap().trim_matches('"').to_string();
+                repo_context == context_str
+            })
+            .ok_or_else(|| anyhow::anyhow!("No repository found for context: {}", context_str))?;
+
+        let target_path = generate_matter_path(
+            &repo.path,
+            &matter.frontmatter.matter_type,
+            &matter.frontmatter.title,
+            &matter.frontmatter.visibility,
+        );
+
+        // Copy the matter item to new location
+        let new_matter = MatterItem {
+            frontmatter: matter.frontmatter,
+            content: matter.content,
+            file_path: target_path,
+        };
+        new_matter.save()?;
+
+        println!("{}", format!("✓ Imported to: {}", new_matter.file_path.display()).green());
+    } else {
+        // File doesn't have frontmatter, create new matter item
+        println!("{}", "No frontmatter found, creating new matter item...".cyan());
+
+        let content = std::fs::read_to_string(file)?;
+        let title = file
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Imported Document");
+
+        // Use provided matter type or default to Document
+        let matter_type_str = matter_type.unwrap_or("document");
+        let matter_type: MatterType = serde_json::from_str(&format!("\"{}\"", matter_type_str))?;
+
+        let context_str = context.unwrap_or("user");
+        let context_type: snps_core::matter::ContextType = serde_json::from_str(&format!("\"{}\"", context_str))?;
+
+        let config = load_global_config()?;
+        let repositories = load_repositories()?;
+
+        let repo = repositories
+            .repositories
+            .iter()
+            .find(|r| {
+                let repo_context = serde_json::to_string(&r.context_type).unwrap().trim_matches('"').to_string();
+                repo_context == context_str
+            })
+            .ok_or_else(|| anyhow::anyhow!("No repository found for context: {}", context_str))?;
+
+        let file_path = generate_matter_path(&repo.path, &matter_type, title, &snps_core::matter::Visibility::Private);
+
+        let frontmatter = MatterFrontmatter {
+            matter_type,
+            title: title.to_string(),
+            context_type,
+            context_id: config.user.id.clone(),
+            visibility: snps_core::matter::Visibility::Private,
+            tags: vec![],
+            created_at: chrono::Utc::now(),
+            created_by: config.user.name.clone(),
+            updated_at: None,
+            updated_by: None,
+            version: Some(1),
+            status: Some("imported".to_string()),
+            folder_path: None,
+        };
+
+        let matter = MatterItem {
+            frontmatter,
+            content,
+            file_path: file_path.clone(),
+        };
+
+        matter.save()?;
+        println!("{}", format!("✓ Imported to: {}", file_path.display()).green());
+    }
+
+    Ok(())
+}
+
+fn repo_init(
+    path: &Path,
+    context: &str,
+    id: &str,
+    owner_type: Option<&str>,
+    owner_id: Option<&str>,
+) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        format!("Initializing matter repository at {}...", path.display()).bright_cyan()
+    );
+    println!();
+
+    // Parse context type
+    let context_type: snps_core::repository::ContextType = match context.to_lowercase().as_str() {
+        "user" => snps_core::repository::ContextType::User,
+        "team" => snps_core::repository::ContextType::Team,
+        "project" => snps_core::repository::ContextType::Project,
+        _ => {
+            println!("{}", format!("Invalid context type: {}", context).red());
+            println!("  Valid types: user, team, project");
+            return Err(anyhow::anyhow!("Invalid context type"));
+        }
+    };
+
+    // Create repository directory
+    std::fs::create_dir_all(path)?;
+
+    // Create .pmsynapse directory
+    let config_dir = path.join(".pmsynapse");
+    std::fs::create_dir_all(&config_dir)?;
+
+    // Create context.yaml
+    #[derive(Serialize)]
+    struct ContextInfo {
+        context_type: String,
+        id: String,
+        visibility: String,
+    }
+
+    #[derive(Serialize)]
+    struct Owner {
+        owner_type: String,
+        id: String,
+    }
+
+    #[derive(Serialize)]
+    struct RepositoryContext {
+        context: ContextInfo,
+        owner: Option<Owner>,
+    }
+
+    let context_config = RepositoryContext {
+        context: ContextInfo {
+            context_type: context.to_string(),
+            id: id.to_string(),
+            visibility: "private".to_string(),
+        },
+        owner: owner_type.map(|ot| Owner {
+            owner_type: ot.to_string(),
+            id: owner_id.unwrap_or_default().to_string(),
+        }),
+    };
+
+    let context_path = config_dir.join("context.yaml");
+    let yaml = serde_yaml::to_string(&context_config)?;
+    std::fs::write(&context_path, yaml)?;
+
+    println!("{}", "  ✓ Created .pmsynapse/context.yaml".green());
+
+    // Initialize git if not already a repo
+    if !path.join(".git").exists() {
+        let output = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(path)
+            .output()?;
+
+        if output.status.success() {
+            println!("{}", "  ✓ Initialized git repository".green());
+        } else {
+            println!("{}", "  ⚠ Failed to initialize git repository".yellow());
+        }
+    } else {
+        println!("{}", "  ✓ Git repository already exists".green());
+    }
+
+    // Generate repository ID from path
+    let repo_id = format!(
+        "{}-{}",
+        context,
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("repo")
+    );
+
+    // Add to global repositories.yaml
+    let mapping = snps_core::repository::RepositoryMapping {
+        id: repo_id.clone(),
+        path: path.canonicalize()?,
+        context_type,
+        context_id: id.to_string(),
+        visibility: snps_core::repository::Visibility::Private,
+        role: None,
+        auto_index: true,
+        sync: snps_core::repository::RepositorySyncConfig::default(),
+    };
+
+    snps_core::repository::add_repository(mapping)?;
+    println!(
+        "{}",
+        format!("  ✓ Added to repositories config (id: {})", repo_id).green()
+    );
+
+    println!();
+    println!("{}", "Repository initialized successfully!".bright_green());
+    println!("  Path: {}", path.display());
+    println!("  Context: {} ({})", context, id);
+    println!("  ID: {}", repo_id);
+
+    Ok(())
+}
+
+fn repo_clone(url: &str, path: Option<&PathBuf>) -> anyhow::Result<()> {
+    println!("{}", format!("Cloning repository from {}...", url).bright_cyan());
+
+    // Determine target path
+    let target_path = if let Some(p) = path {
+        p.clone()
+    } else {
+        // Extract repo name from URL
+        let repo_name = url
+            .split('/')
+            .next_back()
+            .and_then(|s| s.strip_suffix(".git"))
+            .unwrap_or("repo");
+        PathBuf::from(repo_name)
+    };
+
+    // Clone using git
+    let output = std::process::Command::new("git")
+        .args(["clone", url, &target_path.to_string_lossy()])
+        .output()?;
+
+    if !output.status.success() {
+        println!("{}", "  ✗ Clone failed".red());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        println!("{}", stderr);
+        return Err(anyhow::anyhow!("Git clone failed"));
+    }
+
+    println!("{}", format!("  ✓ Cloned to {}", target_path.display()).green());
+
+    // Check if it has a context.yaml file
+    let context_path = target_path.join(".pmsynapse/context.yaml");
+    if context_path.exists() {
+        println!("{}", "  ✓ Found .pmsynapse/context.yaml".green());
+        // Automatically add to repositories
+        repo_add(&target_path)?;
+    } else {
+        println!(
+            "{}",
+            "  ⚠ No .pmsynapse/context.yaml found. Use 'snps repo add' to register.".yellow()
+        );
+    }
+
+    Ok(())
+}
+
+fn repo_add(path: &Path) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        format!("Adding repository at {}...", path.display()).bright_cyan()
+    );
+
+    // Check if path exists
+    if !path.exists() {
+        println!("{}", format!("  ✗ Path does not exist: {}", path.display()).red());
+        return Err(anyhow::anyhow!("Path does not exist"));
+    }
+
+    // Check for context.yaml
+    let context_path = path.join(".pmsynapse/context.yaml");
+    if !context_path.exists() {
+        println!(
+            "{}",
+            "  ✗ Not a matter repository (missing .pmsynapse/context.yaml)".red()
+        );
+        return Err(anyhow::anyhow!("Missing context.yaml"));
+    }
+
+    // Load context.yaml
+    #[derive(Deserialize)]
+    struct ContextInfo {
+        context_type: String,
+        id: String,
+        visibility: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    struct RepositoryContext {
+        context: ContextInfo,
+    }
+
+    let context_content = std::fs::read_to_string(&context_path)?;
+    let repo_context: RepositoryContext = serde_yaml::from_str(&context_content)?;
+
+    // Parse context type
+    let context_type: snps_core::repository::ContextType =
+        match repo_context.context.context_type.to_lowercase().as_str() {
+            "user" => snps_core::repository::ContextType::User,
+            "team" => snps_core::repository::ContextType::Team,
+            "project" => snps_core::repository::ContextType::Project,
+            _ => {
+                println!(
+                    "{}",
+                    format!("Invalid context type in context.yaml: {}", repo_context.context.context_type).red()
+                );
+                return Err(anyhow::anyhow!("Invalid context type"));
+            }
+        };
+
+    // Parse visibility
+    let visibility = match repo_context
+        .context
+        .visibility
+        .as_deref()
+        .unwrap_or("private")
+        .to_lowercase()
+        .as_str()
+    {
+        "private" => snps_core::repository::Visibility::Private,
+        "shared" => snps_core::repository::Visibility::Shared,
+        "mixed" => snps_core::repository::Visibility::Mixed,
+        _ => snps_core::repository::Visibility::Private,
+    };
+
+    // Generate repository ID
+    let repo_id = format!(
+        "{}-{}",
+        repo_context.context.context_type,
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("repo")
+    );
+
+    // Add to repositories.yaml
+    let mapping = snps_core::repository::RepositoryMapping {
+        id: repo_id.clone(),
+        path: path.canonicalize()?,
+        context_type,
+        context_id: repo_context.context.id.clone(),
+        visibility,
+        role: None,
+        auto_index: true,
+        sync: snps_core::repository::RepositorySyncConfig::default(),
+    };
+
+    snps_core::repository::add_repository(mapping)?;
+
+    println!("{}", "  ✓ Repository added".green());
+    println!("  ID: {}", repo_id);
+    println!("  Context: {} ({})", repo_context.context.context_type, repo_context.context.id);
+
+    Ok(())
+}
+
+fn repo_remove(id: &str) -> anyhow::Result<()> {
+    println!("{}", format!("Removing repository '{}'...", id).bright_cyan());
+
+    snps_core::repository::remove_repository(id)?;
+
+    println!("{}", "  ✓ Repository removed from config".green());
+    println!("  (repository files not deleted)");
+
+    Ok(())
+}
+
+fn repo_list() -> anyhow::Result<()> {
+    println!("{}", "Configured Repositories".bright_blue());
+    println!();
+
+    let config = snps_core::repository::load_repositories()?;
+
+    if config.repositories.is_empty() {
+        println!("{}", "  No repositories configured".dimmed());
+        println!();
+        println!("Use 'snps repo init' to create a new repository");
+        println!("Use 'snps repo add' to add an existing repository");
+        return Ok(());
+    }
+
+    for repo in &config.repositories {
+        println!("{}", format!("● {}", repo.id).bright_cyan());
+        println!("  Path:    {}", repo.path.display());
+        println!(
+            "  Context: {:?} ({})",
+            repo.context_type, repo.context_id
+        );
+        println!("  Visibility: {:?}", repo.visibility);
+        if let Some(ref remote) = repo.sync.remote {
+            println!("  Remote:  {}", remote);
+        }
+        println!();
+    }
+
+    println!("{}", format!("Total: {} repositories", config.repositories.len()).dimmed());
+
+    Ok(())
+}
+
+fn repo_sync(id: Option<&str>) -> anyhow::Result<()> {
+    if let Some(repo_id) = id {
+        println!("{}", format!("Syncing repository '{}'...", repo_id).bright_cyan());
+    } else {
+        println!("{}", "Syncing all repositories...".bright_cyan());
+    }
+
+    let config = snps_core::repository::load_repositories()?;
+    let repos_to_sync: Vec<_> = if let Some(repo_id) = id {
+        config
+            .repositories
+            .iter()
+            .filter(|r| r.id == repo_id)
+            .collect()
+    } else {
+        config.repositories.iter().collect()
+    };
+
+    if repos_to_sync.is_empty() {
+        println!("{}", "  No repositories to sync".dimmed());
+        return Ok(());
+    }
+
+    for repo in repos_to_sync {
+        println!();
+        println!("{}", format!("Syncing {}...", repo.id).bright_blue());
+
+        if !repo.sync.enabled {
+            println!("{}", "  ⚠ Sync disabled for this repository".yellow());
+            continue;
+        }
+
+        if repo.sync.remote.is_none() {
+            println!("{}", "  ⚠ No remote configured".yellow());
+            continue;
+        }
+
+        // Pull from remote
+        let output = std::process::Command::new("git")
+            .args(["pull", "origin", &repo.sync.branch])
+            .current_dir(&repo.path)
+            .output()?;
+
+        if output.status.success() {
+            println!("{}", "  ✓ Pulled from remote".green());
+        } else {
+            println!("{}", "  ✗ Pull failed".red());
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            println!("    {}", stderr);
+        }
+
+        // Push to remote
+        let output = std::process::Command::new("git")
+            .args(["push", "origin", &repo.sync.branch])
+            .current_dir(&repo.path)
+            .output()?;
+
+        if output.status.success() {
+            println!("{}", "  ✓ Pushed to remote".green());
+        } else {
+            println!("{}", "  ⚠ Push failed (may be up to date)".yellow());
+        }
+    }
+
+    println!();
+    println!("{}", "Sync complete".bright_green());
+
+    Ok(())
+}
+
+fn repo_index(id: Option<&str>) -> anyhow::Result<()> {
+    if let Some(repo_id) = id {
+        println!(
+            "{}",
+            format!("Rebuilding index for repository '{}'...", repo_id).bright_cyan()
+        );
+    } else {
+        println!("{}", "Rebuilding index for all repositories...".bright_cyan());
+    }
+
+    let config = snps_core::repository::load_repositories()?;
+    let repos_to_index: Vec<_> = if let Some(repo_id) = id {
+        config
+            .repositories
+            .iter()
+            .filter(|r| r.id == repo_id)
+            .collect()
+    } else {
+        config.repositories.iter().collect()
+    };
+
+    if repos_to_index.is_empty() {
+        println!("{}", "  No repositories to index".dimmed());
+        return Ok(());
+    }
+
+    for repo in repos_to_index {
+        println!();
+        println!("{}", format!("Indexing {}...", repo.id).bright_blue());
+        println!("  Path: {}", repo.path.display());
+
+        if !repo.auto_index {
+            println!("{}", "  ⚠ Auto-index disabled for this repository".yellow());
+            continue;
+        }
+
+        // TODO: Implement actual indexing with CozoDB when Phase 3 is complete
+        // For now, just count files
+        let mut file_count = 0;
+        for entry in WalkDir::new(&repo.path)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                let path = entry.path();
+                if let Some(ext) = path.extension() {
+                    if ext == "md" || ext == "markdown" {
+                        file_count += 1;
+                    }
+                }
+            }
+        }
+
+        println!("{}", format!("  ✓ Found {} markdown files", file_count).green());
+        println!("{}", "  (full indexing pending Phase 3 implementation)".dimmed());
+    }
+
+    println!();
+    println!("{}", "Index rebuild complete".bright_green());
+
+    Ok(())
 }

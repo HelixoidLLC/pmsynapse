@@ -6,9 +6,13 @@
 //! - IDLC (Idea Development Lifecycle) workflow
 
 pub mod claude;
+pub mod config;
 pub mod graph;
 pub mod idlc;
+pub mod index;
 pub mod llm;
+pub mod matter;
+pub mod repository;
 
 use thiserror::Error;
 
@@ -27,11 +31,17 @@ pub enum SynapseError {
     #[error("Configuration error: {0}")]
     Config(String),
 
+    #[error("Matter error: {0}")]
+    Matter(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("YAML parsing error: {0}")]
+    YamlParse(#[from] serde_yaml::Error),
 }
 
 /// Result type alias for PMSynapse operations
