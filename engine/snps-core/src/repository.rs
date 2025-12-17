@@ -60,11 +60,13 @@ pub fn load_repositories() -> Result<RepositoriesConfig, crate::SynapseError> {
         });
     }
 
-    let content = std::fs::read_to_string(&repo_path)
-        .map_err(|e| crate::SynapseError::Config(format!("Failed to read repositories config: {}", e)))?;
+    let content = std::fs::read_to_string(&repo_path).map_err(|e| {
+        crate::SynapseError::Config(format!("Failed to read repositories config: {}", e))
+    })?;
 
-    let config: RepositoriesConfig = serde_yaml::from_str(&content)
-        .map_err(|e| crate::SynapseError::Config(format!("Failed to parse repositories config: {}", e)))?;
+    let config: RepositoriesConfig = serde_yaml::from_str(&content).map_err(|e| {
+        crate::SynapseError::Config(format!("Failed to parse repositories config: {}", e))
+    })?;
 
     Ok(config)
 }
@@ -75,8 +77,9 @@ pub fn save_repositories(config: &RepositoriesConfig) -> Result<(), crate::Synap
         .map_err(|e| crate::SynapseError::Config(format!("Failed to create config dir: {}", e)))?;
 
     let repo_path = config_dir.join("repositories.yaml");
-    let yaml = serde_yaml::to_string(config)
-        .map_err(|e| crate::SynapseError::Config(format!("Failed to serialize repositories: {}", e)))?;
+    let yaml = serde_yaml::to_string(config).map_err(|e| {
+        crate::SynapseError::Config(format!("Failed to serialize repositories: {}", e))
+    })?;
 
     std::fs::write(&repo_path, yaml)
         .map_err(|e| crate::SynapseError::Config(format!("Failed to write repositories: {}", e)))?;

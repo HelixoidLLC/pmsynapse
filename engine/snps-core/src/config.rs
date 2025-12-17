@@ -61,11 +61,7 @@ impl Default for GlobalConfig {
                 index_enabled: true,
                 index_db: home.join(".pmsynapse/index.db"),
                 watch_for_changes: true,
-                exclude_patterns: vec![
-                    "node_modules/".into(),
-                    ".git/".into(),
-                    "*.lock".into(),
-                ],
+                exclude_patterns: vec!["node_modules/".into(), ".git/".into(), "*.lock".into()],
             },
             sync: SyncConfig {
                 auto_sync: false,
@@ -108,9 +104,7 @@ pub fn save_global_config(config: &GlobalConfig) -> Result<(), crate::SynapseErr
 }
 
 pub fn get_pmsynapse_global_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_default()
-        .join(".pmsynapse")
+    dirs::home_dir().unwrap_or_default().join(".pmsynapse")
 }
 
 /// Merged configuration with source tracking
@@ -166,7 +160,12 @@ pub fn load_merged_config(
             .join("config.yaml");
         if team_path.exists() {
             let team_cfg = load_yaml_config(&team_path)?;
-            merge_config(&mut config, &team_cfg, &mut sources, ConfigSource::Team(team.into()));
+            merge_config(
+                &mut config,
+                &team_cfg,
+                &mut sources,
+                ConfigSource::Team(team.into()),
+            );
         }
     }
 
@@ -180,7 +179,12 @@ pub fn load_merged_config(
             .join("config.yaml");
         if project_path.exists() {
             let project_cfg = load_yaml_config(&project_path)?;
-            merge_config(&mut config, &project_cfg, &mut sources, ConfigSource::Project(project.into()));
+            merge_config(
+                &mut config,
+                &project_cfg,
+                &mut sources,
+                ConfigSource::Project(project.into()),
+            );
         }
     }
 
@@ -208,10 +212,16 @@ fn track_sources_for_default(sources: &mut HashMap<String, ConfigSource>) {
     sources.insert("user.email".to_string(), ConfigSource::Default);
     sources.insert("search.index_enabled".to_string(), ConfigSource::Default);
     sources.insert("search.index_db".to_string(), ConfigSource::Default);
-    sources.insert("search.watch_for_changes".to_string(), ConfigSource::Default);
+    sources.insert(
+        "search.watch_for_changes".to_string(),
+        ConfigSource::Default,
+    );
     sources.insert("search.exclude_patterns".to_string(), ConfigSource::Default);
     sources.insert("sync.auto_sync".to_string(), ConfigSource::Default);
-    sources.insert("sync.sync_interval_minutes".to_string(), ConfigSource::Default);
+    sources.insert(
+        "sync.sync_interval_minutes".to_string(),
+        ConfigSource::Default,
+    );
     sources.insert("sync.remote_portal_url".to_string(), ConfigSource::Default);
 }
 
@@ -270,7 +280,9 @@ fn merge_config(
         target.search.index_enabled = source.search.index_enabled;
         sources.insert("search.index_enabled".to_string(), source_type.clone());
     }
-    let default_index_db = dirs::home_dir().unwrap_or_default().join(".pmsynapse/index.db");
+    let default_index_db = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".pmsynapse/index.db");
     if source.search.index_db != default_index_db {
         target.search.index_db = source.search.index_db.clone();
         sources.insert("search.index_db".to_string(), source_type.clone());
@@ -279,7 +291,11 @@ fn merge_config(
         target.search.watch_for_changes = source.search.watch_for_changes;
         sources.insert("search.watch_for_changes".to_string(), source_type.clone());
     }
-    let default_exclude = vec!["node_modules/".to_string(), ".git/".to_string(), "*.lock".to_string()];
+    let default_exclude = vec![
+        "node_modules/".to_string(),
+        ".git/".to_string(),
+        "*.lock".to_string(),
+    ];
     if source.search.exclude_patterns != default_exclude {
         target.search.exclude_patterns = source.search.exclude_patterns.clone();
         sources.insert("search.exclude_patterns".to_string(), source_type.clone());
@@ -292,7 +308,10 @@ fn merge_config(
     }
     if source.sync.sync_interval_minutes != 15 {
         target.sync.sync_interval_minutes = source.sync.sync_interval_minutes;
-        sources.insert("sync.sync_interval_minutes".to_string(), source_type.clone());
+        sources.insert(
+            "sync.sync_interval_minutes".to_string(),
+            source_type.clone(),
+        );
     }
     if source.sync.remote_portal_url.is_some() {
         target.sync.remote_portal_url = source.sync.remote_portal_url.clone();
@@ -332,8 +351,14 @@ mod tests {
     fn test_config_source_display() {
         assert_eq!(ConfigSource::Default.to_string(), "default");
         assert_eq!(ConfigSource::Personal.to_string(), "personal");
-        assert_eq!(ConfigSource::Team("eng".to_string()).to_string(), "team:eng");
-        assert_eq!(ConfigSource::Project("web-app".to_string()).to_string(), "project:web-app");
+        assert_eq!(
+            ConfigSource::Team("eng".to_string()).to_string(),
+            "team:eng"
+        );
+        assert_eq!(
+            ConfigSource::Project("web-app".to_string()).to_string(),
+            "project:web-app"
+        );
     }
 
     #[test]
@@ -341,7 +366,10 @@ mod tests {
         let merged = load_merged_config(None, None).unwrap();
         assert_eq!(merged.config.version, "1.0");
         assert_eq!(merged.sources.get("version"), Some(&ConfigSource::Default));
-        assert_eq!(merged.sources.get("defaults.editor"), Some(&ConfigSource::Default));
+        assert_eq!(
+            merged.sources.get("defaults.editor"),
+            Some(&ConfigSource::Default)
+        );
     }
 
     #[test]
@@ -359,7 +387,10 @@ mod tests {
 
         assert_eq!(target.defaults.editor, "vim");
         assert_eq!(target.user.name, "Test User");
-        assert_eq!(sources.get("defaults.editor"), Some(&ConfigSource::Personal));
+        assert_eq!(
+            sources.get("defaults.editor"),
+            Some(&ConfigSource::Personal)
+        );
         assert_eq!(sources.get("user.name"), Some(&ConfigSource::Personal));
     }
 
@@ -377,9 +408,17 @@ mod tests {
         // Team config sets editor to emacs
         let mut team = GlobalConfig::default();
         team.defaults.editor = "emacs".to_string();
-        merge_config(&mut target, &team, &mut sources, ConfigSource::Team("eng".to_string()));
+        merge_config(
+            &mut target,
+            &team,
+            &mut sources,
+            ConfigSource::Team("eng".to_string()),
+        );
 
         assert_eq!(target.defaults.editor, "emacs");
-        assert_eq!(sources.get("defaults.editor"), Some(&ConfigSource::Team("eng".to_string())));
+        assert_eq!(
+            sources.get("defaults.editor"),
+            Some(&ConfigSource::Team("eng".to_string()))
+        );
     }
 }

@@ -79,8 +79,8 @@ impl MatterItem {
 
     /// Convert matter item to file content (frontmatter + content)
     pub fn to_file_content(&self) -> String {
-        let frontmatter_yaml = serde_yaml::to_string(&self.frontmatter)
-            .expect("Failed to serialize frontmatter");
+        let frontmatter_yaml =
+            serde_yaml::to_string(&self.frontmatter).expect("Failed to serialize frontmatter");
 
         format!("---\n{}---\n\n{}", frontmatter_yaml, self.content)
     }

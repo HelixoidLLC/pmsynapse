@@ -55,9 +55,7 @@ impl MatterIndex {
 
         // Serialize context type
         let context_type_str = serde_json::to_string(&matter.frontmatter.context_type)
-            .map_err(|e| {
-                SynapseError::Matter(format!("Failed to serialize context type: {}", e))
-            })?
+            .map_err(|e| SynapseError::Matter(format!("Failed to serialize context type: {}", e)))?
             .trim_matches('"')
             .to_string();
 
@@ -188,9 +186,8 @@ impl MatterIndex {
                     .any(|c| c.as_os_str() == ".git" || c.as_os_str() == "node_modules")
             })
         {
-            let entry = entry.map_err(|e| {
-                SynapseError::Matter(format!("Failed to walk directory: {}", e))
-            })?;
+            let entry = entry
+                .map_err(|e| SynapseError::Matter(format!("Failed to walk directory: {}", e)))?;
 
             if entry.file_type().is_file() {
                 if let Some(ext) = entry.path().extension() {
@@ -220,7 +217,10 @@ impl MatterIndex {
 
         // Simple search: find matter items where title contains query (case-insensitive)
         // Using starts_with as a simple filter (can be enhanced later with full-text search)
-        let params = BTreeMap::from([("query".to_string(), DataValue::Str(query.to_lowercase().into()))]);
+        let params = BTreeMap::from([(
+            "query".to_string(),
+            DataValue::Str(query.to_lowercase().into()),
+        )]);
 
         let result = self.graph
             .db

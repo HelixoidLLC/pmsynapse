@@ -3,7 +3,7 @@
 //! Provides graph-based knowledge management using CozoDB with Datalog queries.
 
 use crate::{Result, SynapseError};
-use cozo::{DbInstance, DataValue, ScriptMutability};
+use cozo::{DataValue, DbInstance, ScriptMutability};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -203,12 +203,30 @@ impl KnowledgeGraph {
 
         let params = BTreeMap::from([
             ("id".to_string(), DataValue::Str(node.id.to_string().into())),
-            ("node_type".to_string(), DataValue::Str(node_type_str.into())),
-            ("title".to_string(), DataValue::Str(node.title.clone().into())),
-            ("content".to_string(), DataValue::Str(node.content.clone().into())),
-            ("confidence".to_string(), DataValue::from(node.confidence as f64)),
-            ("created_at".to_string(), DataValue::Str(node.created_at.to_rfc3339().into())),
-            ("updated_at".to_string(), DataValue::Str(node.updated_at.to_rfc3339().into())),
+            (
+                "node_type".to_string(),
+                DataValue::Str(node_type_str.into()),
+            ),
+            (
+                "title".to_string(),
+                DataValue::Str(node.title.clone().into()),
+            ),
+            (
+                "content".to_string(),
+                DataValue::Str(node.content.clone().into()),
+            ),
+            (
+                "confidence".to_string(),
+                DataValue::from(node.confidence as f64),
+            ),
+            (
+                "created_at".to_string(),
+                DataValue::Str(node.created_at.to_rfc3339().into()),
+            ),
+            (
+                "updated_at".to_string(),
+                DataValue::Str(node.updated_at.to_rfc3339().into()),
+            ),
         ]);
 
         self.db
@@ -242,11 +260,26 @@ impl KnowledgeGraph {
 
         let params = BTreeMap::from([
             ("id".to_string(), DataValue::Str(edge.id.to_string().into())),
-            ("from_node".to_string(), DataValue::Str(edge.from_node.to_string().into())),
-            ("to_node".to_string(), DataValue::Str(edge.to_node.to_string().into())),
-            ("edge_type".to_string(), DataValue::Str(edge_type_str.into())),
-            ("confidence".to_string(), DataValue::from(edge.confidence as f64)),
-            ("created_at".to_string(), DataValue::Str(edge.created_at.to_rfc3339().into())),
+            (
+                "from_node".to_string(),
+                DataValue::Str(edge.from_node.to_string().into()),
+            ),
+            (
+                "to_node".to_string(),
+                DataValue::Str(edge.to_node.to_string().into()),
+            ),
+            (
+                "edge_type".to_string(),
+                DataValue::Str(edge_type_str.into()),
+            ),
+            (
+                "confidence".to_string(),
+                DataValue::from(edge.confidence as f64),
+            ),
+            (
+                "created_at".to_string(),
+                DataValue::Str(edge.created_at.to_rfc3339().into()),
+            ),
         ]);
 
         self.db
@@ -278,11 +311,13 @@ impl KnowledgeGraph {
             .trim_matches('"')
             .to_string();
 
-        let params = BTreeMap::from([
-            ("node_type".to_string(), DataValue::Str(node_type_str.into())),
-        ]);
+        let params = BTreeMap::from([(
+            "node_type".to_string(),
+            DataValue::Str(node_type_str.into()),
+        )]);
 
-        let result = self.db
+        let result = self
+            .db
             .run_script(
                 r#"
                 ?[id, node_type, title, content, confidence, created_at, updated_at] :=
@@ -306,12 +341,16 @@ impl KnowledgeGraph {
         tracing::debug!("Finding nodes related to {} at depth {}", node_id, depth);
 
         let params = BTreeMap::from([
-            ("start_node".to_string(), DataValue::Str(node_id.to_string().into())),
+            (
+                "start_node".to_string(),
+                DataValue::Str(node_id.to_string().into()),
+            ),
             ("depth".to_string(), DataValue::from(depth as i64)),
         ]);
 
         // Find nodes directly connected from the start node
-        let result = self.db
+        let result = self
+            .db
             .run_script(
                 r#"
                 ?[id, node_type, title, content, confidence, created_at, updated_at] :=
@@ -335,7 +374,8 @@ impl KnowledgeGraph {
 
         tracing::debug!("Listing all nodes");
 
-        let result = self.db
+        let result = self
+            .db
             .run_script(
                 r#"
                 ?[id, node_type, title, content, confidence, created_at, updated_at] :=
@@ -357,11 +397,11 @@ impl KnowledgeGraph {
 
         tracing::debug!("Getting node: {}", node_id);
 
-        let params = BTreeMap::from([
-            ("id".to_string(), DataValue::Str(node_id.to_string().into())),
-        ]);
+        let params =
+            BTreeMap::from([("id".to_string(), DataValue::Str(node_id.to_string().into()))]);
 
-        let result = self.db
+        let result = self
+            .db
             .run_script(
                 r#"
                 ?[id, node_type, title, content, confidence, created_at, updated_at] :=
@@ -401,7 +441,9 @@ impl KnowledgeGraph {
                     .get_str()
                     .ok_or_else(|| SynapseError::Graph("Invalid node_type type".into()))?;
                 let node_type: NodeType = serde_json::from_str(&format!("\"{}\"", node_type_str))
-                    .map_err(|e| SynapseError::Graph(format!("Failed to parse node type: {}", e)))?;
+                    .map_err(|e| {
+                    SynapseError::Graph(format!("Failed to parse node type: {}", e))
+                })?;
 
                 let title = row[2]
                     .get_str()
@@ -415,7 +457,8 @@ impl KnowledgeGraph {
 
                 let confidence = row[4]
                     .get_float()
-                    .ok_or_else(|| SynapseError::Graph("Invalid confidence type".into()))? as f32;
+                    .ok_or_else(|| SynapseError::Graph("Invalid confidence type".into()))?
+                    as f32;
 
                 let created_at_str = row[5]
                     .get_str()

@@ -26,8 +26,8 @@ pub fn parse_frontmatter(content: &str) -> Result<(MatterFrontmatter, &str), cra
     let remaining_content = &rest[end_pos + 4..].trim(); // Skip \n---
 
     // Parse YAML
-    let frontmatter: MatterFrontmatter = serde_yaml::from_str(frontmatter_str)
-        .map_err(crate::SynapseError::YamlParse)?;
+    let frontmatter: MatterFrontmatter =
+        serde_yaml::from_str(frontmatter_str).map_err(crate::SynapseError::YamlParse)?;
 
     Ok((frontmatter, remaining_content))
 }
@@ -35,7 +35,7 @@ pub fn parse_frontmatter(content: &str) -> Result<(MatterFrontmatter, &str), cra
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::matter::{MatterType, ContextType, Visibility};
+    use crate::matter::{ContextType, MatterType, Visibility};
     use chrono::Utc;
 
     #[test]
@@ -86,7 +86,7 @@ title: Test
 
     #[test]
     fn test_round_trip() {
-        use crate::matter::{MatterItem, MatterFrontmatter};
+        use crate::matter::{MatterFrontmatter, MatterItem};
         use std::path::PathBuf;
 
         let frontmatter = MatterFrontmatter {

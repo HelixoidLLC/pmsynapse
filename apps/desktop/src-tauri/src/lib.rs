@@ -2,9 +2,9 @@
 //!
 //! Tauri-based desktop application for PMSynapse.
 
-use tauri::Manager;
 use std::fs;
 use std::path::PathBuf;
+use tauri::Manager;
 
 /// Get daemon PID file path
 fn get_daemon_pid_path() -> PathBuf {
@@ -108,7 +108,11 @@ async fn get_knowledge_graph() -> Result<String, String> {
 
 /// Create a node via daemon
 #[tauri::command]
-async fn create_node(node_type: String, title: String, content: Option<String>) -> Result<String, String> {
+async fn create_node(
+    node_type: String,
+    title: String,
+    content: Option<String>,
+) -> Result<String, String> {
     let url = format!("{}/nodes", get_daemon_url());
     let body = serde_json::json!({
         "node_type": node_type,
@@ -117,7 +121,8 @@ async fn create_node(node_type: String, title: String, content: Option<String>) 
     });
 
     let client = reqwest::Client::new();
-    let response = client.post(&url)
+    let response = client
+        .post(&url)
         .json(&body)
         .send()
         .await
