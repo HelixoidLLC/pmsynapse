@@ -42,10 +42,13 @@ BASE_BRANCH=${2:-$(git branch --show-current)}
 
 # Get base directory name (should be 'humanlayer')
 REPO_BASE_NAME=$(basename "$(pwd)")
+REPO_BASE_NAME=""
 
-if [ ! -z "$HUMANLAYER_WORKTREE_OVERRIDE_BASE" ]; then
+export PMSYNAPSE_WORKTREE_OVERRIDE_BASE="../pmsynapse-worktrees"
+
+if [ ! -z "$PMSYNAPSE_WORKTREE_OVERRIDE_BASE" ]; then
     WORKTREE_DIR_NAME="${WORKTREE_NAME}"
-    WORKTREES_BASE="${HUMANLAYER_WORKTREE_OVERRIDE_BASE}/${REPO_BASE_NAME}"
+    WORKTREES_BASE="${PMSYNAPSE_WORKTREE_OVERRIDE_BASE}/${REPO_BASE_NAME}"
 else
     WORKTREE_DIR_NAME="${WORKTREE_NAME}"
     WORKTREES_BASE="$HOME/wt/${REPO_BASE_NAME}"
@@ -117,21 +120,22 @@ fi
 # fi
 
 # Initialize thoughts (non-interactive mode with hardcoded directory)
-if [ "$INIT_THOUGHTS" = true ]; then
-    echo "🧠 Initializing thoughts..."
-    cd "$WORKTREE_PATH"
-    if humanlayer thoughts init --directory humanlayer > /dev/null 2>&1; then
-        echo "✅ Thoughts initialized!"
-        # Run sync to create searchable directory
-        if humanlayer thoughts sync > /dev/null 2>&1; then
-            echo "✅ Thoughts searchable index created!"
-        else
-            echo "⚠️  Could not create searchable index. Run 'humanlayer thoughts sync' manually."
-        fi
-    else
-        echo "⚠️  Could not initialize thoughts automatically. Run 'humanlayer thoughts init' manually."
-    fi
-fi
+# TODOL : Re-enable when thoughts feature is stable
+# if [ "$INIT_THOUGHTS" = true ]; then
+#     echo "🧠 Initializing thoughts..."
+#     cd "$WORKTREE_PATH"
+#     if humanlayer thoughts init --directory humanlayer > /dev/null 2>&1; then
+#         echo "✅ Thoughts initialized!"
+#         # Run sync to create searchable directory
+#         if humanlayer thoughts sync > /dev/null 2>&1; then
+#             echo "✅ Thoughts searchable index created!"
+#         else
+#             echo "⚠️  Could not create searchable index. Run 'humanlayer thoughts sync' manually."
+#         fi
+#     else
+#         echo "⚠️  Could not initialize thoughts automatically. Run 'humanlayer thoughts init' manually."
+#     fi
+# fi
 
 # Return to original directory
 cd - > /dev/null
