@@ -158,12 +158,18 @@ setup-ci:
 
 # Install git hooks
 githooks:
-	@echo "Installing git hooks..."
-	@mkdir -p .git/hooks
-	@cp scripts/pre-push .git/hooks/pre-push
-	@chmod +x .git/hooks/pre-push
-	@echo "✅ Git hooks installed!"
-	@echo "   Pre-push hook will run: make check-test"
+	@if [ -f .git ]; then \
+		echo "⏭️  Skipping git hooks installation (worktree detected)"; \
+		echo "   Hooks are shared from main repo: $$(git rev-parse --git-common-dir)"; \
+		echo "   To install hooks, run 'make githooks' from the main repo"; \
+	else \
+		echo "Installing git hooks..."; \
+		mkdir -p .git/hooks; \
+		cp scripts/pre-push .git/hooks/pre-push; \
+		chmod +x .git/hooks/pre-push; \
+		echo "✅ Git hooks installed!"; \
+		echo "   Pre-push hook will run: make check-test"; \
+	fi
 
 # Check for local branches (block pushing)
 check-local:
