@@ -458,4 +458,4 @@ The `thoughts/searchable/` directory contains path-encoded hardlinks:
 
 ---
 
-*Part of PMSynapse AI-Enabled Project Management*
+*Part of PMSynapse AI-Enabled Knowledge Management*

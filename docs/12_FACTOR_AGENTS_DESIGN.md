@@ -753,4 +753,4 @@ class ThoughtsLocator:  # 3 steps max
 ---
 
 *Document created: December 2025*
-*Part of: PMSynapse AI-Enabled Project Management Research*
+*Part of: PMSynapse AI-Enabled Knowledge Management Research*

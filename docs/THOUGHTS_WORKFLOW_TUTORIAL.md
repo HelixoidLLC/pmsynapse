@@ -812,4 +812,4 @@ The thoughts system transforms ephemeral conversation into persistent knowledge:
 
 ---
 
-*Part of PMSynapse AI-Enabled Project Management*
+*Part of PMSynapse AI-Enabled Knowledge Management*

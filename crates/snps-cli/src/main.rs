@@ -1,12 +1,12 @@
 //! PMSynapse CLI
 //!
-//! Command line interface for AI-enabled project management.
+//! Command line interface for AI-enabled knowledge management.
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-/// PMSynapse CLI - AI-enabled project management
+/// PMSynapse CLI - AI-enabled knowledge management
 #[derive(Parser)]
 #[command(name = "snps")]
 #[command(author, version, about, long_about = None)]
@@ -153,7 +153,7 @@ fn main() -> anyhow::Result<()> {
     );
     println!(
         "{}",
-        "║       PMSynapse - AI Project Mgmt     ║".bright_cyan()
+        "║       PMSynapse - AI Knowledge Mgmt   ║".bright_cyan()
     );
     println!(
         "{}",

@@ -1,4 +1,4 @@
-# PMSynapse Core Features: End-to-End Project Management
+# PMSynapse Core Features: End-to-End Knowledge Management
 
 ## Naming Convention
 

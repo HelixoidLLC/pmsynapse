@@ -2,15 +2,15 @@
 //!
 //! Tests workflow configuration, stage transitions, and validation.
 
-use snps_core::idlc::{IdlcConfig, IdlcItem, Stage, Status, Transition};
+use snps_core::idlc::{IdlcConfig, IdlcItem, Stage, Status, TeamInfo, Transition};
 
 #[test]
 fn test_default_config() {
     let config = IdlcConfig::default_config();
 
     // Default config should have standard stages and statuses
-    assert_eq!(config.team_id, "default");
-    assert_eq!(config.team_name, "Default Team");
+    assert_eq!(config.team.id, "default");
+    assert_eq!(config.team.name, "Default Team");
     assert_eq!(config.stages.len(), 6);
     assert_eq!(config.statuses.len(), 6);
 }
@@ -135,23 +135,27 @@ fn test_workflow_serialization() {
 
     // Serialize to JSON
     let json = serde_json::to_string_pretty(&config).expect("Failed to serialize");
-    assert!(json.contains("team_id"));
-    assert!(json.contains("team_name"));
+    assert!(json.contains("team"));
     assert!(json.contains("stages"));
     assert!(json.contains("statuses"));
     assert!(json.contains("transitions"));
 
     // Deserialize back
     let parsed: IdlcConfig = serde_json::from_str(&json).expect("Failed to deserialize");
-    assert_eq!(parsed.team_id, config.team_id);
+    assert_eq!(parsed.team.id, config.team.id);
     assert_eq!(parsed.stages.len(), config.stages.len());
 }
 
 #[test]
 fn test_custom_workflow_creation() {
     let custom_config = IdlcConfig {
-        team_id: "custom-team".to_string(),
-        team_name: "Custom Team".to_string(),
+        version: "1.0".to_string(),
+        team: TeamInfo {
+            id: "custom-team".to_string(),
+            name: "Custom Team".to_string(),
+            description: None,
+        },
+        extends: None,
         stages: vec![
             Stage {
                 id: "idea".to_string(),
@@ -187,10 +191,14 @@ fn test_custom_workflow_creation() {
         transitions: vec![Transition {
             from: "new".to_string(),
             to: vec!["finished".to_string()],
+            except: vec![],
         }],
+        automation: vec![],
+        complexity: None,
+        integrations: None,
     };
 
-    assert_eq!(custom_config.team_id, "custom-team");
+    assert_eq!(custom_config.team.id, "custom-team");
     assert_eq!(custom_config.stages.len(), 2);
     assert!(custom_config.is_valid_transition("new", "finished"));
 }
@@ -233,6 +241,7 @@ fn test_transition_properties() {
     let transition = Transition {
         from: "todo".to_string(),
         to: vec!["in-progress".to_string(), "canceled".to_string()],
+        except: vec![],
     };
 
     assert_eq!(transition.from, "todo");

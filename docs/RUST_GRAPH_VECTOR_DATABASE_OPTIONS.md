@@ -474,4 +474,4 @@ features = ["wasm", "nothread", "storage-mem"]  # WASM: in-memory
 ---
 
 *Research completed: December 2025*
-*Part of: PMSynapse AI-Enabled Project Management Research*
+*Part of: PMSynapse AI-Enabled Knowledge Management Research*

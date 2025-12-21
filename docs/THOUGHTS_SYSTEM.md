@@ -780,4 +780,4 @@ ln -sf ~/humanlayer-thoughts thoughts
 
 ---
 
-*Part of PMSynapse AI-Enabled Project Management*
+*Part of PMSynapse AI-Enabled Knowledge Management*

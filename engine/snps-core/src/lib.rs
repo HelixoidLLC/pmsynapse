@@ -10,6 +10,7 @@ pub mod config;
 pub mod graph;
 pub mod idlc;
 pub mod index;
+pub mod knowledge;
 pub mod llm;
 pub mod matter;
 pub mod repository;
@@ -33,6 +34,9 @@ pub enum SynapseError {
 
     #[error("Matter error: {0}")]
     Matter(String),
+
+    #[error("Knowledge error: {0}")]
+    Knowledge(String),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

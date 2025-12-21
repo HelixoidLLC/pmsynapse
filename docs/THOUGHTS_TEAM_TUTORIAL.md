@@ -365,4 +365,4 @@ Now that you've learned the basics through practice:
 
 ---
 
-*Part of PMSynapse AI-Enabled Project Management*
+*Part of PMSynapse AI-Enabled Knowledge Management*

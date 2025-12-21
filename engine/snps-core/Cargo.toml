@@ -42,6 +42,12 @@ serde_yaml = { workspace = true }
 # File system utilities
 walkdir = { workspace = true }
 
+# Hashing for sync
+sha2 = "0.10"
+
+# Pattern matching for git exclude
+regex = "1.10"
+
 [dev-dependencies]
 insta = { workspace = true }
 tokio-test = "0.4"

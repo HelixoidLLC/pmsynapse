@@ -113,25 +113,6 @@ cargo nextest run             # Faster parallel execution
 cargo insta review            # Snapshot tests
 ```
 
-
-## Rust Conventions
-
-### Module Naming
-Use named files instead of `mod.rs` (Rust 2018+):
-```
-src/graph.rs              # ✅ Preferred
-src/graph/mod.rs          # ❌ Avoid unless module has submodules
-```
-
-Only use directories when module has submodules:
-```
-src/
-├── graph.rs              # Parent module
-└── graph/
-    ├── node.rs           # graph::node
-    └── edge.rs           # graph::edge
-```
-
 ## Development Workflow
 
 ### Thoughts System

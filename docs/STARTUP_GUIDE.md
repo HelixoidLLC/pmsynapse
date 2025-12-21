@@ -474,4 +474,4 @@ snps daemon stop --profile X   # Stop profile
 
 ---
 
-*Part of PMSynapse AI-Enabled Project Management*
+*Part of PMSynapse AI-Enabled Knowledge Management*

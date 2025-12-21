@@ -81,6 +81,12 @@ enum Commands {
         action: Option<TeamCommands>,
     },
 
+    /// IDLC workflow management
+    Idlc {
+        #[command(subcommand)]
+        action: IdlcCommands,
+    },
+
     /// Query the knowledge graph
     Graph {
         /// Datalog query to execute
@@ -159,6 +165,13 @@ enum Commands {
     Repo {
         #[command(subcommand)]
         action: RepoCommands,
+    },
+
+    /// Manage knowledge repositories (alias: know)
+    #[command(alias = "know")]
+    Knowledge {
+        #[command(subcommand)]
+        action: KnowledgeCommands,
     },
 }
 
@@ -494,6 +507,88 @@ enum TeamCommands {
     },
 }
 
+/// IDLC (Idea Development Lifecycle) management commands
+#[derive(Subcommand)]
+enum IdlcCommands {
+    /// Initialize IDLC for current project
+    Init {
+        /// Template to use (default, ml-research, devops)
+        #[arg(short, long)]
+        template: Option<String>,
+
+        /// Team ID
+        #[arg(long)]
+        team_id: Option<String>,
+
+        /// Team name
+        #[arg(long)]
+        team_name: Option<String>,
+
+        /// Skip interactive prompts
+        #[arg(short, long)]
+        yes: bool,
+    },
+
+    /// Display current IDLC configuration
+    Show {
+        /// Team ID (defaults to active team)
+        #[arg(long)]
+        team: Option<String>,
+
+        /// Output format (yaml, json, table)
+        #[arg(short, long, default_value = "yaml")]
+        format: String,
+    },
+
+    /// Validate IDLC configuration
+    Validate {
+        /// Path to IDLC config file
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Team ID (defaults to active team)
+        #[arg(long)]
+        team: Option<String>,
+    },
+
+    /// Generate IDLC from template
+    Generate {
+        /// Template name (default, ml-research, devops)
+        #[arg(short, long)]
+        template: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Team ID
+        #[arg(long)]
+        team_id: Option<String>,
+
+        /// Team name
+        #[arg(long)]
+        team_name: Option<String>,
+    },
+
+    /// Generate workflow visualization
+    Visualize {
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format (mermaid, dot)
+        #[arg(short, long, default_value = "mermaid")]
+        format: String,
+
+        /// Team ID (defaults to active team)
+        #[arg(long)]
+        team: Option<String>,
+    },
+
+    /// List available templates
+    Templates,
+}
+
 #[derive(Subcommand)]
 enum ClaudeCommands {
     /// Parse and display a Claude Code session
@@ -811,6 +906,133 @@ enum RepoCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum KnowledgeCommands {
+    /// Initialize knowledge management
+    Init {
+        /// User shadow repository path
+        #[arg(long)]
+        user: Option<PathBuf>,
+
+        /// Team shadow repository path
+        #[arg(long)]
+        team: Option<PathBuf>,
+
+        /// Project shadow repository path
+        #[arg(long)]
+        project: Option<PathBuf>,
+
+        /// Interactive mode
+        #[arg(long, short)]
+        interactive: bool,
+    },
+
+    /// Manage shadow repositories
+    #[command(subcommand)]
+    Repo(KnowledgeRepoCommands),
+
+    /// Synchronize knowledge
+    Sync {
+        /// Only pull from shadow repos
+        #[arg(long)]
+        pull_only: bool,
+
+        /// Only push to project shadow repo
+        #[arg(long)]
+        push_only: bool,
+
+        /// Force re-sync (ignore timestamps)
+        #[arg(long)]
+        force: bool,
+
+        /// Filter by context
+        #[arg(long)]
+        context: Option<String>,
+
+        /// Filter by repository ID
+        #[arg(long)]
+        repo: Option<String>,
+
+        /// Dry run (show what would be synced)
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Show sync status
+    Status,
+
+    /// Search knowledge
+    Search {
+        /// Search query
+        query: String,
+    },
+
+    /// List knowledge documents
+    List,
+
+    /// Manage individual files
+    #[command(subcommand)]
+    File(KnowledgeFileCommands),
+}
+
+#[derive(Subcommand)]
+enum KnowledgeRepoCommands {
+    /// Add shadow repository
+    Add {
+        /// Context type (user, team, project)
+        context: String,
+
+        /// Path to shadow repository
+        path: PathBuf,
+
+        /// Optional human-readable ID
+        #[arg(long)]
+        id: Option<String>,
+    },
+
+    /// Remove shadow repository
+    Remove {
+        /// Repository ID to remove
+        id: String,
+    },
+
+    /// List configured repositories
+    List,
+
+    /// Show repository details
+    Show {
+        /// Repository ID
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum KnowledgeFileCommands {
+    /// Add file to shadow repository
+    Add {
+        /// Path to file in project
+        path: PathBuf,
+
+        /// Repository ID to add to
+        #[arg(long, conflicts_with = "context")]
+        repo: Option<String>,
+
+        /// Repository context (user/team/project)
+        #[arg(long, conflicts_with = "repo")]
+        context: Option<String>,
+    },
+
+    /// Remove file from shadow repository
+    Remove {
+        /// Path to file in project
+        path: PathBuf,
+
+        /// Also delete file from project directory
+        #[arg(long)]
+        delete_local: bool,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
@@ -830,7 +1052,7 @@ fn main() -> anyhow::Result<()> {
     );
     println!(
         "{}",
-        "║       PMSynapse - AI Project Mgmt     ║".bright_cyan()
+        "║       PMSynapse - AI Knowledge Mgmt   ║".bright_cyan()
     );
     println!(
         "{}",
@@ -846,6 +1068,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Proposals { action } => cmd_proposals(action),
         Commands::Templates { action } => cmd_templates(action),
         Commands::Team { action } => cmd_team(action),
+        Commands::Idlc { action } => cmd_idlc(action),
         Commands::Graph { query, export } => cmd_graph(query, export),
         Commands::Thoughts { action } => cmd_thoughts(action),
         Commands::Daemon { action } => cmd_daemon(action),
@@ -864,6 +1087,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Config { action } => cmd_config(action),
         Commands::Matter { action } => cmd_matter(action),
         Commands::Repo { action } => cmd_repo(action),
+        Commands::Knowledge { action } => cmd_knowledge(action),
     }
 }
 
@@ -1058,6 +1282,357 @@ fn cmd_team(action: Option<TeamCommands>) -> anyhow::Result<()> {
             println!("  • default (active)");
         }
     }
+
+    Ok(())
+}
+
+fn cmd_idlc(action: IdlcCommands) -> anyhow::Result<()> {
+    match action {
+        IdlcCommands::Init {
+            template,
+            team_id,
+            team_name,
+            yes,
+        } => idlc_init(template, team_id, team_name, yes),
+        IdlcCommands::Show { team, format } => idlc_show(team, format),
+        IdlcCommands::Validate { file, team } => idlc_validate(file, team),
+        IdlcCommands::Generate {
+            template,
+            output,
+            team_id,
+            team_name,
+        } => idlc_generate(template, output, team_id, team_name),
+        IdlcCommands::Visualize {
+            output,
+            format,
+            team,
+        } => idlc_visualize(output, format, team),
+        IdlcCommands::Templates => idlc_templates(),
+    }
+}
+
+fn idlc_init(
+    template: Option<String>,
+    team_id: Option<String>,
+    team_name: Option<String>,
+    yes: bool,
+) -> anyhow::Result<()> {
+    use dialoguer::{Input, Select};
+
+    // Check if .pmsynapse exists
+    let pmsynapse_dir = Path::new(".pmsynapse");
+    if !pmsynapse_dir.exists() {
+        println!(
+            "{}",
+            "PMSynapse not initialized. Run 'snps init' first.".red()
+        );
+        return Ok(());
+    }
+
+    // Interactive template selection if not provided
+    let template_name = if let Some(t) = template {
+        t
+    } else if yes {
+        "default".to_string()
+    } else {
+        let templates = snps_core::idlc::templates::list_templates();
+        let items: Vec<String> = templates
+            .iter()
+            .map(|(name, desc)| format!("{} - {}", name, desc))
+            .collect();
+
+        let selection = Select::new()
+            .with_prompt("Select workflow template")
+            .items(&items)
+            .default(0)
+            .interact()?;
+
+        templates[selection].0.to_string()
+    };
+
+    // Get team info
+    let tid = team_id.unwrap_or_else(|| {
+        if yes {
+            "default".to_string()
+        } else {
+            Input::new()
+                .with_prompt("Team ID")
+                .default("default".to_string())
+                .interact_text()
+                .unwrap()
+        }
+    });
+
+    let tname = team_name.unwrap_or_else(|| {
+        if yes {
+            "Default Team".to_string()
+        } else {
+            Input::new()
+                .with_prompt("Team name")
+                .default("Default Team".to_string())
+                .interact_text()
+                .unwrap()
+        }
+    });
+
+    // Generate config from template
+    let template_yaml = snps_core::idlc::templates::get_template(&template_name)
+        .ok_or_else(|| anyhow::anyhow!("Unknown template: {}", template_name))?;
+
+    let config_yaml = template_yaml
+        .replace("{{team_id}}", &tid)
+        .replace("{{team_name}}", &tname);
+
+    // Validate before writing
+    snps_core::idlc::IdlcConfig::from_yaml(&config_yaml)?;
+
+    // Write to file
+    let output_path = pmsynapse_dir.join("teams").join(&tid).join("idlc.yaml");
+
+    std::fs::create_dir_all(output_path.parent().unwrap())?;
+    std::fs::write(&output_path, config_yaml)?;
+
+    println!("{} {}", "Created".green(), output_path.display());
+    println!(
+        "{}",
+        format!(
+            "Run 'snps idlc show --team {}' to view the configuration",
+            tid
+        )
+        .dimmed()
+    );
+
+    Ok(())
+}
+
+fn idlc_show(team: Option<String>, format: String) -> anyhow::Result<()> {
+    let team_id = team.unwrap_or_else(|| "default".to_string());
+    let config_path = Path::new(".pmsynapse")
+        .join("teams")
+        .join(&team_id)
+        .join("idlc.yaml");
+
+    if !config_path.exists() {
+        println!(
+            "{}",
+            format!(
+                "No IDLC config found for team '{}'. Run 'snps idlc init' first.",
+                team_id
+            )
+            .yellow()
+        );
+        return Ok(());
+    }
+
+    let config = snps_core::idlc::IdlcConfig::from_file(&config_path)?;
+
+    match format.as_str() {
+        "yaml" => {
+            println!("# Configuration: {}", config_path.display());
+            println!();
+            let yaml = std::fs::read_to_string(&config_path)?;
+            println!("{}", yaml);
+        }
+        "json" => {
+            println!("// Configuration: {}", config_path.display());
+            println!();
+            let json = serde_json::to_string_pretty(&config)?;
+            println!("{}", json);
+        }
+        "table" => {
+            println!("{}: {}", "Configuration".bold(), config_path.display());
+            println!();
+            println!("{}", "Stages:".bold());
+            for stage in &config.stages {
+                let terminal = if stage.terminal { " (terminal)" } else { "" };
+                println!(
+                    "  {} - {}{}",
+                    stage.id.cyan(),
+                    stage.name,
+                    terminal.dimmed()
+                );
+            }
+            println!();
+            println!("{}", "Statuses:".bold());
+            for status in &config.statuses {
+                println!(
+                    "  {} ({}) - {}",
+                    status.id.cyan(),
+                    status.stage_id.dimmed(),
+                    status.name
+                );
+            }
+            println!();
+            println!("{}", "Transitions:".bold());
+            for t in &config.transitions {
+                let from = if t.from == "*" {
+                    "*".yellow().to_string()
+                } else {
+                    t.from.clone()
+                };
+                println!("  {} -> {}", from, t.to.join(", ").green());
+                if !t.except.is_empty() {
+                    println!("    {} {}", "except:".dimmed(), t.except.join(", "));
+                }
+            }
+        }
+        _ => {
+            println!("{}", format!("Unknown format: {}", format).red());
+        }
+    }
+
+    Ok(())
+}
+
+fn idlc_validate(file: Option<PathBuf>, team: Option<String>) -> anyhow::Result<()> {
+    let config_path = if let Some(f) = file {
+        f
+    } else {
+        let team_id = team.unwrap_or_else(|| "default".to_string());
+        Path::new(".pmsynapse")
+            .join("teams")
+            .join(&team_id)
+            .join("idlc.yaml")
+            .to_path_buf()
+    };
+
+    if !config_path.exists() {
+        eprintln!(
+            "{}",
+            format!("File not found: {}", config_path.display()).red()
+        );
+        std::process::exit(1);
+    }
+
+    match snps_core::idlc::IdlcConfig::from_file(&config_path) {
+        Ok(config) => {
+            println!("{} {}", "Valid".green().bold(), config_path.display());
+            println!(
+                "  {} stages, {} statuses, {} transitions",
+                config.stages.len(),
+                config.statuses.len(),
+                config.transitions.len()
+            );
+        }
+        Err(e) => {
+            eprintln!("{} {}", "Invalid".red().bold(), config_path.display());
+            eprintln!("  {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+fn idlc_generate(
+    template: String,
+    output: Option<PathBuf>,
+    team_id: Option<String>,
+    team_name: Option<String>,
+) -> anyhow::Result<()> {
+    let template_yaml = snps_core::idlc::templates::get_template(&template)
+        .ok_or_else(|| anyhow::anyhow!("Unknown template: {}", template))?;
+
+    let tid = team_id.unwrap_or_else(|| "my-team".to_string());
+    let tname = team_name.unwrap_or_else(|| "My Team".to_string());
+
+    let config_yaml = template_yaml
+        .replace("{{team_id}}", &tid)
+        .replace("{{team_name}}", &tname);
+
+    // Validate
+    snps_core::idlc::IdlcConfig::from_yaml(&config_yaml)?;
+
+    if let Some(path) = output {
+        std::fs::write(&path, &config_yaml)?;
+        println!("{} {}", "Generated".green(), path.display());
+    } else {
+        println!("{}", config_yaml);
+    }
+
+    Ok(())
+}
+
+fn idlc_visualize(
+    output: Option<PathBuf>,
+    _format: String,
+    team: Option<String>,
+) -> anyhow::Result<()> {
+    let team_id = team.unwrap_or_else(|| "default".to_string());
+    let config_path = Path::new(".pmsynapse")
+        .join("teams")
+        .join(&team_id)
+        .join("idlc.yaml");
+
+    if !config_path.exists() {
+        println!(
+            "{}",
+            format!(
+                "No IDLC config found for team '{}'. Run 'snps idlc init' first.",
+                team_id
+            )
+            .yellow()
+        );
+        return Ok(());
+    }
+
+    let config = snps_core::idlc::IdlcConfig::from_file(&config_path)?;
+    let diagram = generate_mermaid_diagram(&config);
+
+    if let Some(path) = output {
+        std::fs::write(&path, &diagram)?;
+        println!("{} {}", "Generated".green(), path.display());
+    } else {
+        println!("{}", diagram);
+    }
+
+    Ok(())
+}
+
+fn generate_mermaid_diagram(config: &snps_core::idlc::IdlcConfig) -> String {
+    let mut lines = vec!["stateDiagram-v2".to_string()];
+
+    // Find initial state (first non-terminal stage's first status)
+    if let Some(first_status) = config.statuses.first() {
+        lines.push(format!("    [*] --> {}", first_status.id.replace('-', "_")));
+    }
+
+    // Add transitions
+    for t in &config.transitions {
+        if t.from == "*" {
+            // Skip wildcards in visualization (too cluttered)
+            continue;
+        }
+        let from = t.from.replace('-', "_");
+        for to in &t.to {
+            let to_id = to.replace('-', "_");
+            lines.push(format!("    {} --> {}", from, to_id));
+        }
+    }
+
+    // Mark terminal states
+    for status in &config.statuses {
+        if let Some(stage) = config.stages.iter().find(|s| s.id == status.stage_id) {
+            if stage.terminal {
+                lines.push(format!("    {} --> [*]", status.id.replace('-', "_")));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn idlc_templates() -> anyhow::Result<()> {
+    println!("{}", "Available IDLC Templates:".bold());
+    println!();
+    for (name, description) in snps_core::idlc::templates::list_templates() {
+        println!("  {} - {}", name.cyan(), description);
+    }
+    println!();
+    println!(
+        "{}",
+        "Use 'snps idlc init --template <name>' to initialize with a template".dimmed()
+    );
 
     Ok(())
 }
@@ -5437,6 +6012,888 @@ fn repo_index(id: Option<&str>) -> anyhow::Result<()> {
 
     println!();
     println!("{}", "Index rebuild complete".bright_green());
+
+    Ok(())
+}
+
+// Knowledge management commands
+
+fn cmd_knowledge(action: KnowledgeCommands) -> anyhow::Result<()> {
+    match action {
+        KnowledgeCommands::Init { user, team, project, interactive } => {
+            knowledge_init(user, team, project, interactive)
+        }
+        KnowledgeCommands::Repo(repo_action) => cmd_knowledge_repo(repo_action),
+        KnowledgeCommands::Sync { pull_only, push_only, force, context, repo, dry_run } => {
+            knowledge_sync(pull_only, push_only, force, context, repo, dry_run)
+        }
+        KnowledgeCommands::Status => knowledge_status(),
+        KnowledgeCommands::Search { query } => knowledge_search(&query),
+        KnowledgeCommands::List => knowledge_list(),
+        KnowledgeCommands::File(file_action) => cmd_knowledge_file(file_action),
+    }
+}
+
+fn cmd_knowledge_repo(action: KnowledgeRepoCommands) -> anyhow::Result<()> {
+    match action {
+        KnowledgeRepoCommands::Add { context, path, id } => {
+            knowledge_repo_add(&context, &path, id)
+        }
+        KnowledgeRepoCommands::Remove { id } => knowledge_repo_remove(&id),
+        KnowledgeRepoCommands::List => knowledge_repo_list(),
+        KnowledgeRepoCommands::Show { id } => knowledge_repo_show(&id),
+    }
+}
+
+fn cmd_knowledge_file(action: KnowledgeFileCommands) -> anyhow::Result<()> {
+    match action {
+        KnowledgeFileCommands::Add { path, repo, context } => {
+            knowledge_file_add(&path, repo, context)
+        }
+        KnowledgeFileCommands::Remove { path, delete_local } => {
+            knowledge_file_remove(&path, delete_local)
+        }
+    }
+}
+
+fn knowledge_init(
+    user: Option<PathBuf>,
+    team: Option<PathBuf>,
+    project: Option<PathBuf>,
+    interactive: bool,
+) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let config_path = project_root.join(".pmsynapse/repositories.yaml");
+
+    if config_path.exists() {
+        println!("{}", "Knowledge already initialized.".yellow());
+        println!("Use 'snps know repo add' to add repositories.");
+        return Ok(());
+    }
+
+    println!("{}", "Initializing knowledge management...".bright_blue());
+
+    let mut config = snps_core::knowledge::KnowledgeConfig::default();
+
+    // Collect repository paths
+    if interactive {
+        // Interactive prompts
+        println!("\nEnter shadow repository paths (leave empty to skip):\n");
+
+        if let Some(path) = prompt_for_path("User repository path") {
+            let id = snps_core::knowledge::generate_repo_id(
+                &snps_core::knowledge::KnowledgeContext::User, &path
+            );
+            config.repositories.push(snps_core::knowledge::ShadowRepository {
+                path,
+                id: Some(id),
+                description: None,
+                repo_type: "folder".to_string(),
+                context: snps_core::knowledge::KnowledgeContext::User,
+                enabled: true,
+            });
+        }
+
+        if let Some(path) = prompt_for_path("Team repository path") {
+            let id = snps_core::knowledge::generate_repo_id(
+                &snps_core::knowledge::KnowledgeContext::Team, &path
+            );
+            config.repositories.push(snps_core::knowledge::ShadowRepository {
+                path,
+                id: Some(id),
+                description: None,
+                repo_type: "folder".to_string(),
+                context: snps_core::knowledge::KnowledgeContext::Team,
+                enabled: true,
+            });
+        }
+
+        if let Some(path) = prompt_for_path("Project repository path") {
+            let id = snps_core::knowledge::generate_repo_id(
+                &snps_core::knowledge::KnowledgeContext::Project, &path
+            );
+            config.repositories.push(snps_core::knowledge::ShadowRepository {
+                path,
+                id: Some(id),
+                description: None,
+                repo_type: "folder".to_string(),
+                context: snps_core::knowledge::KnowledgeContext::Project,
+                enabled: true,
+            });
+        }
+    } else {
+        // Non-interactive: use provided paths
+        if let Some(path) = user {
+            let id = snps_core::knowledge::generate_repo_id(
+                &snps_core::knowledge::KnowledgeContext::User, &path
+            );
+            config.repositories.push(snps_core::knowledge::ShadowRepository {
+                path,
+                id: Some(id),
+                description: None,
+                repo_type: "folder".to_string(),
+                context: snps_core::knowledge::KnowledgeContext::User,
+                enabled: true,
+            });
+        }
+
+        if let Some(path) = team {
+            let id = snps_core::knowledge::generate_repo_id(
+                &snps_core::knowledge::KnowledgeContext::Team, &path
+            );
+            config.repositories.push(snps_core::knowledge::ShadowRepository {
+                path,
+                id: Some(id),
+                description: None,
+                repo_type: "folder".to_string(),
+                context: snps_core::knowledge::KnowledgeContext::Team,
+                enabled: true,
+            });
+        }
+
+        if let Some(path) = project {
+            let id = snps_core::knowledge::generate_repo_id(
+                &snps_core::knowledge::KnowledgeContext::Project, &path
+            );
+            config.repositories.push(snps_core::knowledge::ShadowRepository {
+                path,
+                id: Some(id),
+                description: None,
+                repo_type: "folder".to_string(),
+                context: snps_core::knowledge::KnowledgeContext::Project,
+                enabled: true,
+            });
+        }
+    }
+
+    // Create directories
+    std::fs::create_dir_all(project_root.join(".pmsynapse"))?;
+    std::fs::create_dir_all(project_root.join("knowledge"))?;
+    std::fs::create_dir_all(project_root.join("knowledge/research"))?;
+    std::fs::create_dir_all(project_root.join("knowledge/prds"))?;
+    std::fs::create_dir_all(project_root.join("knowledge/plans"))?;
+    std::fs::create_dir_all(project_root.join("knowledge/tickets"))?;
+    std::fs::create_dir_all(project_root.join("knowledge/decisions"))?;
+
+    // Save config
+    snps_core::knowledge::save_knowledge_config(&project_root, &config)?;
+
+    println!("{}", "✓ Created .pmsynapse/repositories.yaml".green());
+    println!("{}", "✓ Created knowledge/ directory structure".green());
+    println!();
+    println!("{}", "Knowledge management initialized!".bright_green());
+    println!("Run 'snps know sync' to sync from shadow repositories.");
+
+    Ok(())
+}
+
+fn prompt_for_path(prompt: &str) -> Option<PathBuf> {
+    use std::io::{self, Write};
+
+    print!("{}: ", prompt);
+    io::stdout().flush().ok()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).ok()?;
+
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(trimmed))
+    }
+}
+
+fn knowledge_repo_add(context: &str, path: &PathBuf, id: Option<String>) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let mut config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    let context_type = match context.to_lowercase().as_str() {
+        "user" => snps_core::knowledge::KnowledgeContext::User,
+        "team" => snps_core::knowledge::KnowledgeContext::Team,
+        "project" => snps_core::knowledge::KnowledgeContext::Project,
+        _ => anyhow::bail!("Invalid context. Use: user, team, or project"),
+    };
+
+    // Resolve path (handle relative paths)
+    let resolved_path = if path.is_absolute() {
+        path.clone()
+    } else {
+        project_root.join(path)
+    };
+
+    if !resolved_path.exists() {
+        anyhow::bail!("Path does not exist: {}", resolved_path.display());
+    }
+
+    let repo_id = id.unwrap_or_else(|| {
+        snps_core::knowledge::generate_repo_id(&context_type, &resolved_path)
+    });
+
+    // Check for duplicate ID
+    if config.repositories.iter().any(|r| r.id.as_ref() == Some(&repo_id)) {
+        anyhow::bail!("Repository with ID '{}' already exists", repo_id);
+    }
+
+    config.repositories.push(snps_core::knowledge::ShadowRepository {
+        path: resolved_path.clone(),
+        id: Some(repo_id.clone()),
+        description: None,
+        repo_type: "folder".to_string(),
+        context: context_type,
+        enabled: true,
+    });
+
+    snps_core::knowledge::save_knowledge_config(&project_root, &config)?;
+
+    println!("{}", format!("✓ Added repository '{}' ({} context)", repo_id, context).green());
+    println!("  Path: {}", resolved_path.display());
+
+    Ok(())
+}
+
+fn knowledge_repo_list() -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    if config.repositories.is_empty() {
+        println!("{}", "No repositories configured.".dimmed());
+        println!("Use 'snps know repo add <context> <path>' to add one.");
+        return Ok(());
+    }
+
+    println!("{}", "Configured repositories:".bright_blue());
+    println!();
+
+    for repo in &config.repositories {
+        let id = repo.id.as_deref().unwrap_or("<no-id>");
+        let status = if repo.enabled { "enabled".green() } else { "disabled".yellow() };
+        let context = match repo.context {
+            snps_core::knowledge::KnowledgeContext::User => "user",
+            snps_core::knowledge::KnowledgeContext::Team => "team",
+            snps_core::knowledge::KnowledgeContext::Project => "project",
+        };
+
+        println!("  {} [{}] ({})", id.bright_white(), context, status);
+        println!("    Path: {}", repo.path.display().to_string().dimmed());
+    }
+
+    Ok(())
+}
+
+fn knowledge_repo_remove(id: &str) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let mut config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    let initial_len = config.repositories.len();
+    config.repositories.retain(|r| r.id.as_deref() != Some(id));
+
+    if config.repositories.len() == initial_len {
+        anyhow::bail!("Repository with ID '{}' not found", id);
+    }
+
+    snps_core::knowledge::save_knowledge_config(&project_root, &config)?;
+
+    println!("{}", format!("✓ Removed repository '{}'", id).green());
+
+    Ok(())
+}
+
+fn knowledge_repo_show(id: &str) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    let repo = config.repositories.iter()
+        .find(|r| r.id.as_deref() == Some(id))
+        .ok_or_else(|| anyhow::anyhow!("Repository with ID '{}' not found", id))?;
+
+    println!("{}", format!("Repository: {}", id).bright_blue());
+    println!("  Context: {:?}", repo.context);
+    println!("  Path: {}", repo.path.display());
+    println!("  Type: {}", repo.repo_type);
+    println!("  Enabled: {}", repo.enabled);
+    if let Some(desc) = &repo.description {
+        println!("  Description: {}", desc);
+    }
+
+    Ok(())
+}
+
+fn knowledge_file_add(
+    file_path: &Path,
+    repo_id: Option<String>,
+    context: Option<String>,
+) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    // Validate file exists in project
+    if !file_path.exists() {
+        anyhow::bail!("File not found: {}", file_path.display());
+    }
+
+    if !file_path.is_file() {
+        anyhow::bail!("Path is not a file: {}", file_path.display());
+    }
+
+    // Get absolute path and ensure it's inside project
+    let abs_path = std::fs::canonicalize(file_path)?;
+    if !abs_path.starts_with(&project_root) {
+        anyhow::bail!("File must be inside project directory");
+    }
+
+    let relative_path = abs_path.strip_prefix(&project_root)?;
+
+    // Find target repository
+    let repo = find_target_repo(&config, repo_id, context)?;
+
+    // Compute destination path
+    let dest = repo.path.join(relative_path);
+
+    // Check if destination already exists
+    if dest.exists() {
+        let src_hash = snps_core::knowledge::compute_file_hash(&abs_path)?;
+        let dest_hash = snps_core::knowledge::compute_file_hash(&dest)?;
+
+        if src_hash == dest_hash {
+            println!("{}", format!("File already registered (unchanged): {}",
+                relative_path.display()).dimmed());
+            return Ok(());
+        }
+
+        println!("{}", format!("⚠ Overwriting existing file in repository").yellow());
+    }
+
+    // Copy file to shadow repo
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(&abs_path, &dest)?;
+
+    println!("{}", format!("✓ Copied {} → {}",
+        relative_path.display(),
+        dest.display()).green());
+
+    // Update git exclude with ALL files from shadow repos
+    let mut all_paths = Vec::new();
+    for repo in &config.repositories {
+        if repo.enabled {
+            if let Ok(entries) = snps_core::knowledge::scan_shadow_repo(repo) {
+                for entry in entries {
+                    all_paths.push(entry.relative_path);
+                }
+            }
+        }
+    }
+
+    snps_core::knowledge::update_git_exclude(
+        &project_root,
+        &config,
+        &all_paths,
+    )?;
+
+    println!("{}", "✓ Updated .git/info/exclude".green());
+
+    println!();
+    println!("{}", format!("File registered to: {}",
+        repo.id.as_deref().unwrap_or("unknown")).bright_blue());
+
+    Ok(())
+}
+
+fn find_target_repo(
+    config: &snps_core::knowledge::KnowledgeConfig,
+    repo_id: Option<String>,
+    context: Option<String>,
+) -> anyhow::Result<&snps_core::knowledge::ShadowRepository> {
+    // Must specify either repo or context
+    if repo_id.is_none() && context.is_none() {
+        anyhow::bail!("Must specify either --repo <id> or --context <user|team|project>");
+    }
+
+    // Find by repo ID
+    if let Some(id) = repo_id {
+        return config.repositories.iter()
+            .find(|r| r.enabled && r.id.as_deref() == Some(&id))
+            .ok_or_else(|| anyhow::anyhow!("Repository '{}' not found or disabled", id));
+    }
+
+    // Find by context
+    if let Some(ctx) = context {
+        let context_type = match ctx.to_lowercase().as_str() {
+            "user" => snps_core::knowledge::KnowledgeContext::User,
+            "team" => snps_core::knowledge::KnowledgeContext::Team,
+            "project" => snps_core::knowledge::KnowledgeContext::Project,
+            _ => anyhow::bail!("Invalid context: '{}'. Must be user, team, or project", ctx),
+        };
+
+        return config.repositories.iter()
+            .find(|r| r.enabled && r.context == context_type)
+            .ok_or_else(|| anyhow::anyhow!(
+                "No enabled repository found for context '{}'", ctx
+            ));
+    }
+
+    unreachable!()
+}
+
+fn knowledge_file_remove(
+    file_path: &Path,
+    delete_local: bool,
+) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    // Resolve to absolute path if relative
+    let abs_path = if file_path.is_absolute() {
+        file_path.to_path_buf()
+    } else {
+        project_root.join(file_path)
+    };
+
+    // Ensure it's inside project
+    if !abs_path.starts_with(&project_root) {
+        anyhow::bail!("File must be inside project directory");
+    }
+
+    let relative_path = abs_path.strip_prefix(&project_root)?;
+
+    // Find the file in shadow repos
+    let mut found_repos = Vec::new();
+    for repo in &config.repositories {
+        if !repo.enabled {
+            continue;
+        }
+
+        let shadow_file = repo.path.join(relative_path);
+        if shadow_file.exists() {
+            found_repos.push((repo.clone(), shadow_file));
+        }
+    }
+
+    if found_repos.is_empty() {
+        anyhow::bail!("File '{}' not found in any shadow repository", relative_path.display());
+    }
+
+    // Remove from all shadow repos where it exists
+    for (repo, shadow_file) in &found_repos {
+        std::fs::remove_file(shadow_file)?;
+        println!("{}", format!("✓ Removed from repository: {}",
+            repo.id.as_deref().unwrap_or("unknown")).green());
+
+        // Clean up empty parent directories
+        if let Some(parent) = shadow_file.parent() {
+            let _ = cleanup_empty_dirs(parent, &repo.path);
+        }
+    }
+
+    // Delete from project if requested
+    if delete_local {
+        if abs_path.exists() {
+            std::fs::remove_file(&abs_path)?;
+            println!("{}", format!("✓ Deleted from project: {}", relative_path.display()).yellow());
+        }
+    }
+
+    // Update git exclude by scanning all repos
+    let mut all_paths = Vec::new();
+    for repo in &config.repositories {
+        if repo.enabled {
+            if let Ok(entries) = snps_core::knowledge::scan_shadow_repo(repo) {
+                for entry in entries {
+                    all_paths.push(entry.relative_path);
+                }
+            }
+        }
+    }
+
+    snps_core::knowledge::update_git_exclude(
+        &project_root,
+        &config,
+        &all_paths,
+    )?;
+
+    println!("{}", "✓ Updated .git/info/exclude".green());
+
+    if !delete_local && abs_path.exists() {
+        println!();
+        println!("{}", format!("File kept in project: {}", relative_path.display()).bright_blue());
+        println!("{}", "  (No longer tracked by shadow repo)".dimmed());
+    }
+
+    Ok(())
+}
+
+fn cleanup_empty_dirs(dir: &Path, base: &Path) -> std::io::Result<()> {
+    if dir == base || !dir.starts_with(base) {
+        return Ok(());
+    }
+
+    // Only remove if empty
+    if std::fs::read_dir(dir)?.next().is_none() {
+        std::fs::remove_dir(dir)?;
+
+        // Recurse to parent
+        if let Some(parent) = dir.parent() {
+            let _ = cleanup_empty_dirs(parent, base);
+        }
+    }
+
+    Ok(())
+}
+
+fn knowledge_sync(
+    pull_only: bool,
+    push_only: bool,
+    force: bool,
+    _context_filter: Option<String>,
+    _repo_filter: Option<String>,
+    dry_run: bool,
+) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    println!("{}", "Syncing knowledge...".bright_blue());
+
+    // Pull phase
+    if !push_only {
+        println!("\n{}", "Pull phase:".bright_cyan());
+
+        let operations = snps_core::knowledge::build_sync_plan(&config, &project_root, force)?;
+
+        let mut copied = 0;
+        let mut overridden = 0;
+        let mut skipped = 0;
+
+        for op in &operations {
+            match op {
+                snps_core::knowledge::SyncOperation::Copy { from, to, repo_id } => {
+                    if dry_run {
+                        println!("  [DRY-RUN] COPY {} → {}", from.display(), to.display());
+                    } else {
+                        if let Some(parent) = to.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        std::fs::copy(from, to)?;
+                        println!("  {} {} ({})", "COPY".green(), to.display(), repo_id.dimmed());
+                    }
+                    copied += 1;
+                }
+                snps_core::knowledge::SyncOperation::Override { from, to, repo_id, overridden_repo } => {
+                    if dry_run {
+                        println!("  [DRY-RUN] OVERRIDE {} ({} > {})", to.display(), repo_id, overridden_repo);
+                    } else {
+                        if let Some(parent) = to.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        std::fs::copy(from, to)?;
+                        println!("  {} {} ({} > {})", "OVERRIDE".yellow(), to.display(), repo_id, overridden_repo);
+                    }
+                    overridden += 1;
+                }
+                snps_core::knowledge::SyncOperation::Skip { path, reason } => {
+                    if force || dry_run {
+                        println!("  {} {} ({})", "SKIP".dimmed(), path.display(), reason);
+                    }
+                    skipped += 1;
+                }
+                _ => {}
+            }
+        }
+
+        println!();
+        println!("  {} files copied, {} overridden, {} skipped", copied, overridden, skipped);
+
+        // Update .git/info/exclude
+        if !dry_run {
+            let synced_paths: Vec<PathBuf> = operations.iter()
+                .filter_map(|op| match op {
+                    snps_core::knowledge::SyncOperation::Copy { to, .. } |
+                    snps_core::knowledge::SyncOperation::Override { to, .. } => {
+                        to.strip_prefix(&project_root).ok().map(|p| p.to_path_buf())
+                    }
+                    _ => None,
+                })
+                .collect();
+
+            snps_core::knowledge::update_git_exclude(&project_root, &config, &synced_paths)?;
+            println!("{}", "  ✓ Updated .git/info/exclude".green());
+        }
+    }
+
+    // Push phase
+    if !pull_only {
+        println!("\n{}", "Push phase:".bright_cyan());
+
+        // Find project-context repo
+        let project_repo = config.repositories.iter()
+            .find(|r| matches!(r.context, snps_core::knowledge::KnowledgeContext::Project) && r.enabled);
+
+        if let Some(repo) = project_repo {
+            let pushed = push_to_shadow_repo(&project_root, repo, dry_run)?;
+            println!("  {} files pushed to project repository", pushed);
+        } else {
+            println!("{}", "  No project repository configured (skipping push)".dimmed());
+        }
+    }
+
+    // Log sync
+    if !dry_run {
+        log_sync_operation(&project_root, !push_only, !pull_only)?;
+    }
+
+    println!();
+    println!("{}", "✅ Sync complete".bright_green());
+
+    Ok(())
+}
+
+fn push_to_shadow_repo(project_root: &Path, repo: &snps_core::knowledge::ShadowRepository, dry_run: bool) -> anyhow::Result<usize> {
+    let knowledge_dir = project_root.join("knowledge");
+    if !knowledge_dir.exists() {
+        return Ok(0);
+    }
+
+    let mut count = 0;
+
+    for entry in walkdir::WalkDir::new(&knowledge_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let src = entry.path();
+        let relative = src.strip_prefix(project_root)?;
+        let dest = repo.path.join(relative);
+
+        // Only push if modified
+        let should_push = if dest.exists() {
+            let src_hash = snps_core::knowledge::compute_file_hash(src)?;
+            let dest_hash = snps_core::knowledge::compute_file_hash(&dest)?;
+            src_hash != dest_hash
+        } else {
+            true
+        };
+
+        if should_push {
+            if dry_run {
+                println!("  [DRY-RUN] PUSH {}", relative.display());
+            } else {
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::copy(src, &dest)?;
+                println!("  {} {}", "PUSH".bright_blue(), relative.display());
+            }
+            count += 1;
+        }
+    }
+
+    Ok(count)
+}
+
+fn log_sync_operation(project_root: &Path, pulled: bool, pushed: bool) -> anyhow::Result<()> {
+    let log_path = project_root.join(".pmsynapse/sync.log");
+    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+
+    let mode = match (pulled, pushed) {
+        (true, true) => "bidirectional",
+        (true, false) => "pull-only",
+        (false, true) => "push-only",
+        _ => "unknown",
+    };
+
+    let log_entry = format!("[{}] SYNC COMPLETE (mode: {})\n", timestamp, mode);
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)?;
+
+    use std::io::Write;
+    file.write_all(log_entry.as_bytes())?;
+
+    Ok(())
+}
+
+fn knowledge_status() -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
+
+    println!("{}", "Knowledge sync status:".bright_blue());
+    println!();
+
+    // Show configured repos
+    println!("{}", "Repositories:".bright_cyan());
+    for repo in &config.repositories {
+        let id = repo.id.as_deref().unwrap_or("<no-id>");
+        let context = match repo.context {
+            snps_core::knowledge::KnowledgeContext::User => "user",
+            snps_core::knowledge::KnowledgeContext::Team => "team",
+            snps_core::knowledge::KnowledgeContext::Project => "project",
+        };
+        let status = if repo.enabled { "✓".green() } else { "✗".red() };
+        let exists = if repo.path.exists() { "exists".green() } else { "missing".red() };
+
+        println!("  {} {} [{}] - {} ({})", status, id, context, repo.path.display(), exists);
+    }
+
+    // Show working copy status
+    println!();
+    println!("{}", "Working copy:".bright_cyan());
+    let knowledge_dir = project_root.join("knowledge");
+    if knowledge_dir.exists() {
+        let file_count = walkdir::WalkDir::new(&knowledge_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .count();
+        println!("  {} files in knowledge/", file_count);
+    } else {
+        println!("  {} knowledge/ directory not found", "⚠".yellow());
+    }
+
+    // Show last sync time
+    let log_path = project_root.join(".pmsynapse/sync.log");
+    if log_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&log_path) {
+            if let Some(last_line) = content.lines().last() {
+                println!();
+                println!("{}", "Last sync:".bright_cyan());
+                println!("  {}", last_line);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn knowledge_search(query: &str) -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let knowledge_dir = project_root.join("knowledge");
+
+    if !knowledge_dir.exists() {
+        println!("{}", "Knowledge not initialized or no files synced.".red());
+        return Ok(());
+    }
+
+    println!("{}", format!("Searching for '{}'...", query).bright_blue());
+    println!();
+
+    // Use ripgrep for search
+    let output = std::process::Command::new("rg")
+        .args([
+            "--color=never",
+            "--line-number",
+            "--heading",
+            "--context=1",
+            query,
+        ])
+        .current_dir(&knowledge_dir)
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for line in stdout.lines() {
+                // Prefix with knowledge/ for clarity
+                if !line.is_empty() && !line.starts_with("--") {
+                    if line.contains(':') {
+                        println!("knowledge/{}", line);
+                    } else {
+                        println!("knowledge/{}", line.bright_white());
+                    }
+                } else {
+                    println!("{}", line);
+                }
+            }
+        }
+        Ok(_) => {
+            println!("{}", "No matches found.".dimmed());
+        }
+        Err(e) => {
+            // Fallback to basic grep if rg not available
+            eprintln!("{}", format!("ripgrep not found, using basic search: {}", e).yellow());
+            basic_search(&knowledge_dir, query)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn basic_search(dir: &Path, query: &str) -> anyhow::Result<()> {
+    let query_lower = query.to_lowercase();
+
+    for entry in walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        if let Ok(content) = std::fs::read_to_string(path) {
+            for (line_num, line) in content.lines().enumerate() {
+                if line.to_lowercase().contains(&query_lower) {
+                    let relative = path.strip_prefix(dir.parent().unwrap_or(dir))?;
+                    println!("{}:{}: {}", relative.display(), line_num + 1, line.trim());
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn knowledge_list() -> anyhow::Result<()> {
+    let project_root = std::env::current_dir()?;
+    let knowledge_dir = project_root.join("knowledge");
+
+    if !knowledge_dir.exists() {
+        println!("{}", "Knowledge not initialized or no files synced.".red());
+        return Ok(());
+    }
+
+    println!("{}", "Knowledge documents:".bright_blue());
+    println!();
+
+    // Group by subdirectory
+    let mut by_category: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+
+    for entry in walkdir::WalkDir::new(&knowledge_dir)
+        .min_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let relative = path.strip_prefix(&knowledge_dir)?;
+
+        let category = relative.components()
+            .next()
+            .map(|c| c.as_os_str().to_string_lossy().to_string())
+            .unwrap_or_else(|| "other".to_string());
+
+        let filename = relative.to_string_lossy().to_string();
+
+        by_category.entry(category).or_default().push(filename);
+    }
+
+    // Print grouped
+    let mut categories: Vec<_> = by_category.keys().collect();
+    categories.sort();
+
+    for category in categories {
+        if let Some(files) = by_category.get(category) {
+            println!("{}/", category.bright_cyan());
+            let mut sorted_files = files.clone();
+            sorted_files.sort();
+            for file in sorted_files {
+                println!("  {}", file);
+            }
+            println!();
+        }
+    }
+
+    let total: usize = by_category.values().map(|v| v.len()).sum();
+    println!("{}", format!("Total: {} documents", total).dimmed());
 
     Ok(())
 }

@@ -1060,4 +1060,4 @@ agentdb query --query "authentication approach comparison" --synthesize-context
 ---
 
 *Document created: December 2025*
-*Part of: PMSynapse AI-Enabled Project Management Research*
+*Part of: PMSynapse AI-Enabled Knowledge Management Research*

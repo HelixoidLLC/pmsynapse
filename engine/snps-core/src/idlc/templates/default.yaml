@@ -1,0 +1,184 @@
+version: "1.0"
+
+team:
+  id: "{{team_id}}"
+  name: "{{team_name}}"
+  description: "Standard software development workflow"
+
+stages:
+  - id: triage
+    name: "Triage"
+    description: "Initial intake for all new issues, ideas, and requests"
+    required: true
+    terminal: false
+
+  - id: backlog
+    name: "Backlog"
+    description: "Prioritized queue of accepted work"
+    required: true
+    terminal: false
+
+  - id: unstarted
+    name: "Unstarted"
+    description: "Scheduled but not yet started"
+    required: true
+    terminal: false
+
+  - id: started
+    name: "Started"
+    description: "Active work in progress"
+    required: true
+    terminal: false
+
+  - id: completed
+    name: "Completed"
+    description: "Successfully finished work"
+    required: true
+    terminal: true
+
+statuses:
+  # Triage stage
+  - id: triage
+    stage_id: triage
+    name: "Triage"
+    color: "#6B7280"
+
+  # Backlog stage
+  - id: backlog
+    stage_id: backlog
+    name: "Backlog"
+    color: "#9CA3AF"
+
+  - id: postits
+    stage_id: backlog
+    name: "Post-its"
+    description: "Quick notes and ideas"
+    color: "#FCD34D"
+
+  # Unstarted stage
+  - id: todo
+    stage_id: unstarted
+    name: "Todo"
+    color: "#3B82F6"
+
+  - id: spec-needed
+    stage_id: unstarted
+    name: "Spec Needed"
+    description: "Requires specification/PRD before work"
+    color: "#8B5CF6"
+
+  - id: research-needed
+    stage_id: unstarted
+    name: "Research Needed"
+    description: "Requires investigation before planning"
+    color: "#F59E0B"
+
+  - id: research-in-progress
+    stage_id: unstarted
+    name: "Research in Progress"
+    color: "#F97316"
+
+  - id: research-in-review
+    stage_id: unstarted
+    name: "Research in Review"
+    color: "#FB923C"
+
+  - id: ready-for-plan
+    stage_id: unstarted
+    name: "Ready for Plan"
+    color: "#A78BFA"
+
+  # Started stage
+  - id: plan-in-progress
+    stage_id: started
+    name: "Plan in Progress"
+    color: "#7C3AED"
+
+  - id: plan-in-review
+    stage_id: started
+    name: "Plan in Review"
+    color: "#6D28D9"
+
+  - id: ready-for-dev
+    stage_id: started
+    name: "Ready for Dev"
+    color: "#3B82F6"
+
+  - id: in-dev
+    stage_id: started
+    name: "In Development"
+    color: "#2563EB"
+
+  - id: code-review
+    stage_id: started
+    name: "Code Review"
+    color: "#10B981"
+
+  - id: ready-for-deploy
+    stage_id: started
+    name: "Ready for Deploy"
+    color: "#06B6D4"
+
+  # Completed stage
+  - id: done
+    stage_id: completed
+    name: "Done"
+    color: "#22C55E"
+
+  - id: canceled
+    stage_id: completed
+    name: "Canceled"
+    color: "#EF4444"
+
+transitions:
+  # Triage
+  - from: triage
+    to: [backlog, canceled]
+
+  # Backlog
+  - from: backlog
+    to: [spec-needed, research-needed, ready-for-plan, canceled]
+
+  - from: postits
+    to: [backlog, canceled]
+
+  # Research flow
+  - from: spec-needed
+    to: [research-needed, ready-for-plan]
+
+  - from: research-needed
+    to: [research-in-progress, canceled]
+
+  - from: research-in-progress
+    to: [research-in-review, ready-for-plan]
+
+  - from: research-in-review
+    to: [research-in-progress, ready-for-plan, canceled]
+
+  # Planning flow
+  - from: ready-for-plan
+    to: [plan-in-progress]
+
+  - from: plan-in-progress
+    to: [plan-in-review, canceled]
+
+  - from: plan-in-review
+    to: [plan-in-progress, ready-for-dev, canceled]
+
+  # Development flow
+  - from: ready-for-dev
+    to: [in-dev]
+
+  - from: in-dev
+    to: [code-review, canceled]
+
+  - from: code-review
+    to: [in-dev, ready-for-deploy]
+
+  - from: ready-for-deploy
+    to: [done]
+
+  # Universal: can cancel from most states
+  - from: "*"
+    to: [canceled]
+    except: [done, canceled]

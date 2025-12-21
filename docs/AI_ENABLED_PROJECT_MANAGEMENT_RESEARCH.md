@@ -1,4 +1,4 @@
-# AI-Enabled Project Management Research
+# AI-Enabled Knowledge Management Research
 
 ## Vision: Central AI Coordination Platform
 
@@ -17,9 +17,9 @@ The AI-enabled project management landscape has matured significantly. As of 202
 
 ---
 
-## Part 1: Current State of AI-Enabled Project Management
+## Part 1: Current State of AI-Enabled Knowledge Management
 
-### 1.1 Top AI Project Management Platforms
+### 1.1 Top AI Knowledge Management Platforms
 
 | Platform | Key AI Capabilities | Best For |
 |----------|-------------------|----------|
@@ -303,7 +303,7 @@ Research indicates teams are moving toward a "techno-performative culture" where
 
 ## Sources
 
-### AI Project Management
+### AI Knowledge Management
 - [Hive - AI For Project Management 2024](https://hive.com/blog/ai-for-project-management/)
 - [Forecast - 10 Best AI PM Tools 2025](https://www.forecast.app/blog/10-best-ai-project-management-software)
 - [ClickUp - AI PM Tools 2025](https://clickup.com/blog/ai-project-management-tools/)
