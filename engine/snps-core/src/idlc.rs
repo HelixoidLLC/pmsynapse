@@ -662,5 +662,4 @@ transitions:
         assert!(!config.statuses.is_empty());
         assert!(!config.transitions.is_empty());
     }
-
 }

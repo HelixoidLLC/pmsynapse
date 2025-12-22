@@ -1,6 +1,6 @@
+use crate::SynapseError;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use crate::SynapseError;
 
 /// Context type for knowledge scoping
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -26,8 +26,12 @@ pub struct ShadowRepository {
     pub enabled: bool,
 }
 
-fn default_repo_type() -> String { "folder".to_string() }
-fn default_enabled() -> bool { true }
+fn default_repo_type() -> String {
+    "folder".to_string()
+}
+fn default_enabled() -> bool {
+    true
+}
 
 /// Git exclude pattern configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -50,10 +54,7 @@ impl Default for KnowledgeConfig {
     fn default() -> Self {
         Self {
             version: "1.0".to_string(),
-            git_exclude_patterns: vec![
-                r"^\.pmsynapse/".to_string(),
-                r"^knowledge/".to_string(),
-            ],
+            git_exclude_patterns: vec![r"^\.pmsynapse/".to_string(), r"^knowledge/".to_string()],
             repositories: Vec::new(),
         }
     }
@@ -65,7 +66,7 @@ pub fn load_knowledge_config(project_root: &Path) -> Result<KnowledgeConfig, Syn
 
     if !config_path.exists() {
         return Err(SynapseError::Config(
-            "Knowledge not initialized. Run 'snps know init' first.".to_string()
+            "Knowledge not initialized. Run 'snps know init' first.".to_string(),
         ));
     }
 
@@ -75,7 +76,10 @@ pub fn load_knowledge_config(project_root: &Path) -> Result<KnowledgeConfig, Syn
 }
 
 /// Save knowledge config to project's .pmsynapse/repositories.yaml
-pub fn save_knowledge_config(project_root: &Path, config: &KnowledgeConfig) -> Result<(), SynapseError> {
+pub fn save_knowledge_config(
+    project_root: &Path,
+    config: &KnowledgeConfig,
+) -> Result<(), SynapseError> {
     let config_dir = project_root.join(".pmsynapse");
     std::fs::create_dir_all(&config_dir)?;
 
@@ -87,9 +91,7 @@ pub fn save_knowledge_config(project_root: &Path, config: &KnowledgeConfig) -> R
 
 /// Get repositories sorted by precedence (user first, project last)
 pub fn get_repos_by_precedence(config: &KnowledgeConfig) -> Vec<&ShadowRepository> {
-    let mut repos: Vec<_> = config.repositories.iter()
-        .filter(|r| r.enabled)
-        .collect();
+    let mut repos: Vec<_> = config.repositories.iter().filter(|r| r.enabled).collect();
 
     repos.sort_by_key(|r| match r.context {
         KnowledgeContext::User => 0,
@@ -107,7 +109,8 @@ pub fn generate_repo_id(context: &KnowledgeContext, path: &Path) -> String {
         KnowledgeContext::Team => "team",
         KnowledgeContext::Project => "project",
     };
-    let name = path.file_name()
+    let name = path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "repo".to_string());
     format!("{}-{}", context_str, name)
@@ -132,10 +135,25 @@ pub struct SyncEntry {
 /// Sync operation type
 #[derive(Debug)]
 pub enum SyncOperation {
-    Copy { from: PathBuf, to: PathBuf, repo_id: String },
-    Override { from: PathBuf, to: PathBuf, repo_id: String, overridden_repo: String },
-    Skip { path: PathBuf, reason: String },
-    Push { from: PathBuf, to: PathBuf },
+    Copy {
+        from: PathBuf,
+        to: PathBuf,
+        repo_id: String,
+    },
+    Override {
+        from: PathBuf,
+        to: PathBuf,
+        repo_id: String,
+        overridden_repo: String,
+    },
+    Skip {
+        path: PathBuf,
+        reason: String,
+    },
+    Push {
+        from: PathBuf,
+        to: PathBuf,
+    },
 }
 
 /// Scan shadow repository for files
@@ -145,7 +163,13 @@ pub fn scan_shadow_repo(repo: &ShadowRepository) -> Result<Vec<SyncEntry>, Synap
 
     // Scan entire repository for all files
     if repo.path.exists() {
-        scan_directory(&repo.path, &repo.path, &repo_id, &repo.context, &mut entries)?;
+        scan_directory(
+            &repo.path,
+            &repo.path,
+            &repo_id,
+            &repo.context,
+            &mut entries,
+        )?;
     }
 
     Ok(entries)
@@ -164,7 +188,8 @@ fn scan_directory(
         .filter(|e| e.file_type().is_file())
     {
         let path = entry.path();
-        let relative = path.strip_prefix(base)
+        let relative = path
+            .strip_prefix(base)
             .map_err(|e| SynapseError::Knowledge(e.to_string()))?;
 
         let metadata = std::fs::metadata(path)?;
@@ -185,7 +210,7 @@ fn scan_directory(
 
 /// Compute file hash for change detection
 pub fn compute_file_hash(path: &Path) -> Result<String, SynapseError> {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let content = std::fs::read(path)?;
     let hash = Sha256::digest(&content);
     Ok(format!("{:x}", hash))
@@ -263,7 +288,9 @@ pub fn update_git_exclude(
     }
 
     // Compile exclusion patterns
-    let exclude_patterns: Vec<regex::Regex> = config.git_exclude_patterns.iter()
+    let exclude_patterns: Vec<regex::Regex> = config
+        .git_exclude_patterns
+        .iter()
         .filter_map(|p| regex::Regex::new(p).ok())
         .collect();
 

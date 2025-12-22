@@ -6020,13 +6020,21 @@ fn repo_index(id: Option<&str>) -> anyhow::Result<()> {
 
 fn cmd_knowledge(action: KnowledgeCommands) -> anyhow::Result<()> {
     match action {
-        KnowledgeCommands::Init { user, team, project, interactive } => {
-            knowledge_init(user, team, project, interactive)
-        }
+        KnowledgeCommands::Init {
+            user,
+            team,
+            project,
+            interactive,
+        } => knowledge_init(user, team, project, interactive),
         KnowledgeCommands::Repo(repo_action) => cmd_knowledge_repo(repo_action),
-        KnowledgeCommands::Sync { pull_only, push_only, force, context, repo, dry_run } => {
-            knowledge_sync(pull_only, push_only, force, context, repo, dry_run)
-        }
+        KnowledgeCommands::Sync {
+            pull_only,
+            push_only,
+            force,
+            context,
+            repo,
+            dry_run,
+        } => knowledge_sync(pull_only, push_only, force, context, repo, dry_run),
         KnowledgeCommands::Status => knowledge_status(),
         KnowledgeCommands::Search { query } => knowledge_search(&query),
         KnowledgeCommands::List => knowledge_list(),
@@ -6036,9 +6044,7 @@ fn cmd_knowledge(action: KnowledgeCommands) -> anyhow::Result<()> {
 
 fn cmd_knowledge_repo(action: KnowledgeRepoCommands) -> anyhow::Result<()> {
     match action {
-        KnowledgeRepoCommands::Add { context, path, id } => {
-            knowledge_repo_add(&context, &path, id)
-        }
+        KnowledgeRepoCommands::Add { context, path, id } => knowledge_repo_add(&context, &path, id),
         KnowledgeRepoCommands::Remove { id } => knowledge_repo_remove(&id),
         KnowledgeRepoCommands::List => knowledge_repo_list(),
         KnowledgeRepoCommands::Show { id } => knowledge_repo_show(&id),
@@ -6047,9 +6053,11 @@ fn cmd_knowledge_repo(action: KnowledgeRepoCommands) -> anyhow::Result<()> {
 
 fn cmd_knowledge_file(action: KnowledgeFileCommands) -> anyhow::Result<()> {
     match action {
-        KnowledgeFileCommands::Add { path, repo, context } => {
-            knowledge_file_add(&path, repo, context)
-        }
+        KnowledgeFileCommands::Add {
+            path,
+            repo,
+            context,
+        } => knowledge_file_add(&path, repo, context),
         KnowledgeFileCommands::Remove { path, delete_local } => {
             knowledge_file_remove(&path, delete_local)
         }
@@ -6082,87 +6090,105 @@ fn knowledge_init(
 
         if let Some(path) = prompt_for_path("User repository path") {
             let id = snps_core::knowledge::generate_repo_id(
-                &snps_core::knowledge::KnowledgeContext::User, &path
+                &snps_core::knowledge::KnowledgeContext::User,
+                &path,
             );
-            config.repositories.push(snps_core::knowledge::ShadowRepository {
-                path,
-                id: Some(id),
-                description: None,
-                repo_type: "folder".to_string(),
-                context: snps_core::knowledge::KnowledgeContext::User,
-                enabled: true,
-            });
+            config
+                .repositories
+                .push(snps_core::knowledge::ShadowRepository {
+                    path,
+                    id: Some(id),
+                    description: None,
+                    repo_type: "folder".to_string(),
+                    context: snps_core::knowledge::KnowledgeContext::User,
+                    enabled: true,
+                });
         }
 
         if let Some(path) = prompt_for_path("Team repository path") {
             let id = snps_core::knowledge::generate_repo_id(
-                &snps_core::knowledge::KnowledgeContext::Team, &path
+                &snps_core::knowledge::KnowledgeContext::Team,
+                &path,
             );
-            config.repositories.push(snps_core::knowledge::ShadowRepository {
-                path,
-                id: Some(id),
-                description: None,
-                repo_type: "folder".to_string(),
-                context: snps_core::knowledge::KnowledgeContext::Team,
-                enabled: true,
-            });
+            config
+                .repositories
+                .push(snps_core::knowledge::ShadowRepository {
+                    path,
+                    id: Some(id),
+                    description: None,
+                    repo_type: "folder".to_string(),
+                    context: snps_core::knowledge::KnowledgeContext::Team,
+                    enabled: true,
+                });
         }
 
         if let Some(path) = prompt_for_path("Project repository path") {
             let id = snps_core::knowledge::generate_repo_id(
-                &snps_core::knowledge::KnowledgeContext::Project, &path
+                &snps_core::knowledge::KnowledgeContext::Project,
+                &path,
             );
-            config.repositories.push(snps_core::knowledge::ShadowRepository {
-                path,
-                id: Some(id),
-                description: None,
-                repo_type: "folder".to_string(),
-                context: snps_core::knowledge::KnowledgeContext::Project,
-                enabled: true,
-            });
+            config
+                .repositories
+                .push(snps_core::knowledge::ShadowRepository {
+                    path,
+                    id: Some(id),
+                    description: None,
+                    repo_type: "folder".to_string(),
+                    context: snps_core::knowledge::KnowledgeContext::Project,
+                    enabled: true,
+                });
         }
     } else {
         // Non-interactive: use provided paths
         if let Some(path) = user {
             let id = snps_core::knowledge::generate_repo_id(
-                &snps_core::knowledge::KnowledgeContext::User, &path
+                &snps_core::knowledge::KnowledgeContext::User,
+                &path,
             );
-            config.repositories.push(snps_core::knowledge::ShadowRepository {
-                path,
-                id: Some(id),
-                description: None,
-                repo_type: "folder".to_string(),
-                context: snps_core::knowledge::KnowledgeContext::User,
-                enabled: true,
-            });
+            config
+                .repositories
+                .push(snps_core::knowledge::ShadowRepository {
+                    path,
+                    id: Some(id),
+                    description: None,
+                    repo_type: "folder".to_string(),
+                    context: snps_core::knowledge::KnowledgeContext::User,
+                    enabled: true,
+                });
         }
 
         if let Some(path) = team {
             let id = snps_core::knowledge::generate_repo_id(
-                &snps_core::knowledge::KnowledgeContext::Team, &path
+                &snps_core::knowledge::KnowledgeContext::Team,
+                &path,
             );
-            config.repositories.push(snps_core::knowledge::ShadowRepository {
-                path,
-                id: Some(id),
-                description: None,
-                repo_type: "folder".to_string(),
-                context: snps_core::knowledge::KnowledgeContext::Team,
-                enabled: true,
-            });
+            config
+                .repositories
+                .push(snps_core::knowledge::ShadowRepository {
+                    path,
+                    id: Some(id),
+                    description: None,
+                    repo_type: "folder".to_string(),
+                    context: snps_core::knowledge::KnowledgeContext::Team,
+                    enabled: true,
+                });
         }
 
         if let Some(path) = project {
             let id = snps_core::knowledge::generate_repo_id(
-                &snps_core::knowledge::KnowledgeContext::Project, &path
+                &snps_core::knowledge::KnowledgeContext::Project,
+                &path,
             );
-            config.repositories.push(snps_core::knowledge::ShadowRepository {
-                path,
-                id: Some(id),
-                description: None,
-                repo_type: "folder".to_string(),
-                context: snps_core::knowledge::KnowledgeContext::Project,
-                enabled: true,
-            });
+            config
+                .repositories
+                .push(snps_core::knowledge::ShadowRepository {
+                    path,
+                    id: Some(id),
+                    description: None,
+                    repo_type: "folder".to_string(),
+                    context: snps_core::knowledge::KnowledgeContext::Project,
+                    enabled: true,
+                });
         }
     }
 
@@ -6226,27 +6252,35 @@ fn knowledge_repo_add(context: &str, path: &PathBuf, id: Option<String>) -> anyh
         anyhow::bail!("Path does not exist: {}", resolved_path.display());
     }
 
-    let repo_id = id.unwrap_or_else(|| {
-        snps_core::knowledge::generate_repo_id(&context_type, &resolved_path)
-    });
+    let repo_id =
+        id.unwrap_or_else(|| snps_core::knowledge::generate_repo_id(&context_type, &resolved_path));
 
     // Check for duplicate ID
-    if config.repositories.iter().any(|r| r.id.as_ref() == Some(&repo_id)) {
+    if config
+        .repositories
+        .iter()
+        .any(|r| r.id.as_ref() == Some(&repo_id))
+    {
         anyhow::bail!("Repository with ID '{}' already exists", repo_id);
     }
 
-    config.repositories.push(snps_core::knowledge::ShadowRepository {
-        path: resolved_path.clone(),
-        id: Some(repo_id.clone()),
-        description: None,
-        repo_type: "folder".to_string(),
-        context: context_type,
-        enabled: true,
-    });
+    config
+        .repositories
+        .push(snps_core::knowledge::ShadowRepository {
+            path: resolved_path.clone(),
+            id: Some(repo_id.clone()),
+            description: None,
+            repo_type: "folder".to_string(),
+            context: context_type,
+            enabled: true,
+        });
 
     snps_core::knowledge::save_knowledge_config(&project_root, &config)?;
 
-    println!("{}", format!("✓ Added repository '{}' ({} context)", repo_id, context).green());
+    println!(
+        "{}",
+        format!("✓ Added repository '{}' ({} context)", repo_id, context).green()
+    );
     println!("  Path: {}", resolved_path.display());
 
     Ok(())
@@ -6267,7 +6301,11 @@ fn knowledge_repo_list() -> anyhow::Result<()> {
 
     for repo in &config.repositories {
         let id = repo.id.as_deref().unwrap_or("<no-id>");
-        let status = if repo.enabled { "enabled".green() } else { "disabled".yellow() };
+        let status = if repo.enabled {
+            "enabled".green()
+        } else {
+            "disabled".yellow()
+        };
         let context = match repo.context {
             snps_core::knowledge::KnowledgeContext::User => "user",
             snps_core::knowledge::KnowledgeContext::Team => "team",
@@ -6303,7 +6341,9 @@ fn knowledge_repo_show(id: &str) -> anyhow::Result<()> {
     let project_root = std::env::current_dir()?;
     let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
 
-    let repo = config.repositories.iter()
+    let repo = config
+        .repositories
+        .iter()
         .find(|r| r.id.as_deref() == Some(id))
         .ok_or_else(|| anyhow::anyhow!("Repository with ID '{}' not found", id))?;
 
@@ -6356,12 +6396,23 @@ fn knowledge_file_add(
         let dest_hash = snps_core::knowledge::compute_file_hash(&dest)?;
 
         if src_hash == dest_hash {
-            println!("{}", format!("File already registered (unchanged): {}",
-                relative_path.display()).dimmed());
+            println!(
+                "{}",
+                format!(
+                    "File already registered (unchanged): {}",
+                    relative_path.display()
+                )
+                .dimmed()
+            );
             return Ok(());
         }
 
-        println!("{}", format!("⚠ Overwriting existing file in repository").yellow());
+        println!(
+            "{}",
+            "⚠ Overwriting existing file in repository"
+                .to_string()
+                .yellow()
+        );
     }
 
     // Copy file to shadow repo
@@ -6370,9 +6421,10 @@ fn knowledge_file_add(
     }
     std::fs::copy(&abs_path, &dest)?;
 
-    println!("{}", format!("✓ Copied {} → {}",
-        relative_path.display(),
-        dest.display()).green());
+    println!(
+        "{}",
+        format!("✓ Copied {} → {}", relative_path.display(), dest.display()).green()
+    );
 
     // Update git exclude with ALL files from shadow repos
     let mut all_paths = Vec::new();
@@ -6386,17 +6438,19 @@ fn knowledge_file_add(
         }
     }
 
-    snps_core::knowledge::update_git_exclude(
-        &project_root,
-        &config,
-        &all_paths,
-    )?;
+    snps_core::knowledge::update_git_exclude(&project_root, &config, &all_paths)?;
 
     println!("{}", "✓ Updated .git/info/exclude".green());
 
     println!();
-    println!("{}", format!("File registered to: {}",
-        repo.id.as_deref().unwrap_or("unknown")).bright_blue());
+    println!(
+        "{}",
+        format!(
+            "File registered to: {}",
+            repo.id.as_deref().unwrap_or("unknown")
+        )
+        .bright_blue()
+    );
 
     Ok(())
 }
@@ -6413,7 +6467,9 @@ fn find_target_repo(
 
     // Find by repo ID
     if let Some(id) = repo_id {
-        return config.repositories.iter()
+        return config
+            .repositories
+            .iter()
             .find(|r| r.enabled && r.id.as_deref() == Some(&id))
             .ok_or_else(|| anyhow::anyhow!("Repository '{}' not found or disabled", id));
     }
@@ -6427,20 +6483,17 @@ fn find_target_repo(
             _ => anyhow::bail!("Invalid context: '{}'. Must be user, team, or project", ctx),
         };
 
-        return config.repositories.iter()
+        return config
+            .repositories
+            .iter()
             .find(|r| r.enabled && r.context == context_type)
-            .ok_or_else(|| anyhow::anyhow!(
-                "No enabled repository found for context '{}'", ctx
-            ));
+            .ok_or_else(|| anyhow::anyhow!("No enabled repository found for context '{}'", ctx));
     }
 
     unreachable!()
 }
 
-fn knowledge_file_remove(
-    file_path: &Path,
-    delete_local: bool,
-) -> anyhow::Result<()> {
+fn knowledge_file_remove(file_path: &Path, delete_local: bool) -> anyhow::Result<()> {
     let project_root = std::env::current_dir()?;
     let config = snps_core::knowledge::load_knowledge_config(&project_root)?;
 
@@ -6472,14 +6525,23 @@ fn knowledge_file_remove(
     }
 
     if found_repos.is_empty() {
-        anyhow::bail!("File '{}' not found in any shadow repository", relative_path.display());
+        anyhow::bail!(
+            "File '{}' not found in any shadow repository",
+            relative_path.display()
+        );
     }
 
     // Remove from all shadow repos where it exists
     for (repo, shadow_file) in &found_repos {
         std::fs::remove_file(shadow_file)?;
-        println!("{}", format!("✓ Removed from repository: {}",
-            repo.id.as_deref().unwrap_or("unknown")).green());
+        println!(
+            "{}",
+            format!(
+                "✓ Removed from repository: {}",
+                repo.id.as_deref().unwrap_or("unknown")
+            )
+            .green()
+        );
 
         // Clean up empty parent directories
         if let Some(parent) = shadow_file.parent() {
@@ -6488,11 +6550,12 @@ fn knowledge_file_remove(
     }
 
     // Delete from project if requested
-    if delete_local {
-        if abs_path.exists() {
-            std::fs::remove_file(&abs_path)?;
-            println!("{}", format!("✓ Deleted from project: {}", relative_path.display()).yellow());
-        }
+    if delete_local && abs_path.exists() {
+        std::fs::remove_file(&abs_path)?;
+        println!(
+            "{}",
+            format!("✓ Deleted from project: {}", relative_path.display()).yellow()
+        );
     }
 
     // Update git exclude by scanning all repos
@@ -6507,17 +6570,16 @@ fn knowledge_file_remove(
         }
     }
 
-    snps_core::knowledge::update_git_exclude(
-        &project_root,
-        &config,
-        &all_paths,
-    )?;
+    snps_core::knowledge::update_git_exclude(&project_root, &config, &all_paths)?;
 
     println!("{}", "✓ Updated .git/info/exclude".green());
 
     if !delete_local && abs_path.exists() {
         println!();
-        println!("{}", format!("File kept in project: {}", relative_path.display()).bright_blue());
+        println!(
+            "{}",
+            format!("File kept in project: {}", relative_path.display()).bright_blue()
+        );
         println!("{}", "  (No longer tracked by shadow repo)".dimmed());
     }
 
@@ -6575,19 +6637,40 @@ fn knowledge_sync(
                             std::fs::create_dir_all(parent)?;
                         }
                         std::fs::copy(from, to)?;
-                        println!("  {} {} ({})", "COPY".green(), to.display(), repo_id.dimmed());
+                        println!(
+                            "  {} {} ({})",
+                            "COPY".green(),
+                            to.display(),
+                            repo_id.dimmed()
+                        );
                     }
                     copied += 1;
                 }
-                snps_core::knowledge::SyncOperation::Override { from, to, repo_id, overridden_repo } => {
+                snps_core::knowledge::SyncOperation::Override {
+                    from,
+                    to,
+                    repo_id,
+                    overridden_repo,
+                } => {
                     if dry_run {
-                        println!("  [DRY-RUN] OVERRIDE {} ({} > {})", to.display(), repo_id, overridden_repo);
+                        println!(
+                            "  [DRY-RUN] OVERRIDE {} ({} > {})",
+                            to.display(),
+                            repo_id,
+                            overridden_repo
+                        );
                     } else {
                         if let Some(parent) = to.parent() {
                             std::fs::create_dir_all(parent)?;
                         }
                         std::fs::copy(from, to)?;
-                        println!("  {} {} ({} > {})", "OVERRIDE".yellow(), to.display(), repo_id, overridden_repo);
+                        println!(
+                            "  {} {} ({} > {})",
+                            "OVERRIDE".yellow(),
+                            to.display(),
+                            repo_id,
+                            overridden_repo
+                        );
                     }
                     overridden += 1;
                 }
@@ -6602,14 +6685,18 @@ fn knowledge_sync(
         }
 
         println!();
-        println!("  {} files copied, {} overridden, {} skipped", copied, overridden, skipped);
+        println!(
+            "  {} files copied, {} overridden, {} skipped",
+            copied, overridden, skipped
+        );
 
         // Update .git/info/exclude
         if !dry_run {
-            let synced_paths: Vec<PathBuf> = operations.iter()
+            let synced_paths: Vec<PathBuf> = operations
+                .iter()
                 .filter_map(|op| match op {
-                    snps_core::knowledge::SyncOperation::Copy { to, .. } |
-                    snps_core::knowledge::SyncOperation::Override { to, .. } => {
+                    snps_core::knowledge::SyncOperation::Copy { to, .. }
+                    | snps_core::knowledge::SyncOperation::Override { to, .. } => {
                         to.strip_prefix(&project_root).ok().map(|p| p.to_path_buf())
                     }
                     _ => None,
@@ -6626,14 +6713,18 @@ fn knowledge_sync(
         println!("\n{}", "Push phase:".bright_cyan());
 
         // Find project-context repo
-        let project_repo = config.repositories.iter()
-            .find(|r| matches!(r.context, snps_core::knowledge::KnowledgeContext::Project) && r.enabled);
+        let project_repo = config.repositories.iter().find(|r| {
+            matches!(r.context, snps_core::knowledge::KnowledgeContext::Project) && r.enabled
+        });
 
         if let Some(repo) = project_repo {
             let pushed = push_to_shadow_repo(&project_root, repo, dry_run)?;
             println!("  {} files pushed to project repository", pushed);
         } else {
-            println!("{}", "  No project repository configured (skipping push)".dimmed());
+            println!(
+                "{}",
+                "  No project repository configured (skipping push)".dimmed()
+            );
         }
     }
 
@@ -6648,7 +6739,11 @@ fn knowledge_sync(
     Ok(())
 }
 
-fn push_to_shadow_repo(project_root: &Path, repo: &snps_core::knowledge::ShadowRepository, dry_run: bool) -> anyhow::Result<usize> {
+fn push_to_shadow_repo(
+    project_root: &Path,
+    repo: &snps_core::knowledge::ShadowRepository,
+    dry_run: bool,
+) -> anyhow::Result<usize> {
     let knowledge_dir = project_root.join("knowledge");
     if !knowledge_dir.exists() {
         return Ok(0);
@@ -6731,10 +6826,25 @@ fn knowledge_status() -> anyhow::Result<()> {
             snps_core::knowledge::KnowledgeContext::Team => "team",
             snps_core::knowledge::KnowledgeContext::Project => "project",
         };
-        let status = if repo.enabled { "✓".green() } else { "✗".red() };
-        let exists = if repo.path.exists() { "exists".green() } else { "missing".red() };
+        let status = if repo.enabled {
+            "✓".green()
+        } else {
+            "✗".red()
+        };
+        let exists = if repo.path.exists() {
+            "exists".green()
+        } else {
+            "missing".red()
+        };
 
-        println!("  {} {} [{}] - {} ({})", status, id, context, repo.path.display(), exists);
+        println!(
+            "  {} {} [{}] - {} ({})",
+            status,
+            id,
+            context,
+            repo.path.display(),
+            exists
+        );
     }
 
     // Show working copy status
@@ -6812,7 +6922,10 @@ fn knowledge_search(query: &str) -> anyhow::Result<()> {
         }
         Err(e) => {
             // Fallback to basic grep if rg not available
-            eprintln!("{}", format!("ripgrep not found, using basic search: {}", e).yellow());
+            eprintln!(
+                "{}",
+                format!("ripgrep not found, using basic search: {}", e).yellow()
+            );
             basic_search(&knowledge_dir, query)?;
         }
     }
@@ -6855,7 +6968,8 @@ fn knowledge_list() -> anyhow::Result<()> {
     println!();
 
     // Group by subdirectory
-    let mut by_category: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut by_category: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
 
     for entry in walkdir::WalkDir::new(&knowledge_dir)
         .min_depth(1)
@@ -6866,7 +6980,8 @@ fn knowledge_list() -> anyhow::Result<()> {
         let path = entry.path();
         let relative = path.strip_prefix(&knowledge_dir)?;
 
-        let category = relative.components()
+        let category = relative
+            .components()
             .next()
             .map(|c| c.as_os_str().to_string_lossy().to_string())
             .unwrap_or_else(|| "other".to_string());

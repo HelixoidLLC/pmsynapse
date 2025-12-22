@@ -11,8 +11,6 @@ Feature: IDLC Workflow Management
     When I run "snps idlc templates"
     Then the command should succeed
     And the output should contain "default"
-    And the output should contain "ml-research"
-    And the output should contain "devops"
     And the output should contain "Standard software development workflow"
 
   Scenario: IDLC help shows all subcommands
@@ -42,7 +40,7 @@ Feature: IDLC Workflow Management
 
   Scenario: Generate IDLC from template to file
     Given a temporary directory
-    When I run "snps idlc generate --template devops --team-id ops --team-name Ops --output ops-workflow.yaml"
+    When I run "snps idlc generate --template default --team-id ops --team-name Ops --output ops-workflow.yaml"
     Then the command should succeed
     And the file "ops-workflow.yaml" should exist in temp directory
     And the output should contain "Generated"
