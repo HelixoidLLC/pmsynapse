@@ -41,8 +41,3 @@ snps thoughts init
 ### Support
 
 For issues or questions, open issues on GitHub 
-
----
-
-**Note:** Replace this template with version-specific release notes before publishing.
-Create a file at `.github/release-notes/v{VERSION}.md` in the source repository.
