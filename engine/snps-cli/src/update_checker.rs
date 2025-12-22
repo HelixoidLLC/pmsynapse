@@ -81,7 +81,7 @@ impl UpdateChecker {
     fn fetch_latest_version(&self) -> Result<String> {
         let client = reqwest::blocking::Client::builder()
             .user_agent("pmsynapse-cli")
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(20))
             .build()?;
 
         let response = client

@@ -17,6 +17,14 @@ fi
 VERSION=$1
 TAG="v${VERSION}"
 
+# Validate semver format (X.Y.Z)
+if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo -e "${RED}Error: Invalid version format${NC}"
+  echo "Version must be in semver format: X.Y.Z (e.g., 0.2.2)"
+  echo "Got: ${VERSION}"
+  exit 1
+fi
+
 echo -e "${GREEN}Preparing release ${TAG}${NC}\n"
 
 # Verify we're on main branch
