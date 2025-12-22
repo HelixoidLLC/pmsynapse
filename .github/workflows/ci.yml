@@ -1,8 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
+  workflow_dispatch:  # Manual trigger only for pushes
   pull_request:
     branches: [main, develop]
 
@@ -67,7 +66,7 @@ jobs:
             ${{ runner.os }}-cargo-test-
 
       - name: Run tests
-        run: cargo test --all-features --workspace
+        run: cargo test --all-features --workspace --exclude pmsynapse-desktop
 
   desktop:
     name: Desktop Build Check

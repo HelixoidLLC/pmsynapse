@@ -42,6 +42,41 @@ Ensure `https://github.com/HelixoidLLC/pmsynapse` exists and contains:
 - `install.ps1` (Windows installer)
 - `LICENSE`
 
+## Pre-Release Checklist
+
+**IMPORTANT:** Run these checks before creating a release tag to avoid CI failures:
+
+```bash
+# Run all pre-push checks (recommended)
+make check-test
+```
+
+This runs:
+- `cargo fmt --all -- --check` - Verify code formatting
+- `cargo clippy -p snps-core -p snps-cli --all-targets -- -D warnings` - Lint checks
+- `cargo test -p snps-core -p snps-cli --all-features` - Run tests
+
+**Manual alternative:**
+
+```bash
+# Format code
+cargo fmt --all
+
+# Run linter
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Run tests
+cargo test --all-features --workspace --exclude pmsynapse-desktop
+
+# Build to verify
+cargo build --release -p snps-cli
+```
+
+**If any check fails:**
+- Fix the issues before proceeding
+- Commit the fixes
+- Re-run `make check-test` until all checks pass
+
 ## Release Workflow
 
 ### Step 1: Prepare Release

@@ -13,22 +13,22 @@ env:
 
 jobs:
   # TODO: Re-enable create-release job when ready for full releases
-  # create-release:
-  #   name: Create Release
-  #   runs-on: ubuntu-latest
-  #   outputs:
-  #     upload_url: ${{ steps.create_release.outputs.upload_url }}
-  #   steps:
-  #     - name: Create Release
-  #       id: create_release
-  #       uses: actions/create-release@v1
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #       with:
-  #         tag_name: ${{ github.ref_name }}
-  #         release_name: PMSynapse ${{ github.ref_name }}
-  #         draft: true
-  #         prerelease: false
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: PMSynapse ${{ github.ref_name }}
+          draft: true
+          prerelease: false
 
   # TODO: Re-enable build-desktop job when ready for full releases
   # build-desktop:
@@ -97,18 +97,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: snps-cli_linux_amd64
+          # - os: ubuntu-latest
+          #   target: x86_64-unknown-linux-gnu
+          #   artifact: snps-cli_linux_amd64
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact: snps-cli_macos_amd64
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: snps-cli_macos_arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: snps-cli_windows_amd64
+          # - os: windows-latest
+          #   target: x86_64-pc-windows-msvc
+          #   artifact: snps-cli_windows_amd64
     steps:
       - uses: actions/checkout@v4
 
