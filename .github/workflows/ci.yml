@@ -1,9 +1,7 @@
 name: CI
 
 on:
-  workflow_dispatch:  # Manual trigger only for pushes
-  pull_request:
-    branches: [main, develop]
+  workflow_dispatch  # Manual trigger only for pushes
 
 env:
   CARGO_TERM_COLOR: always
