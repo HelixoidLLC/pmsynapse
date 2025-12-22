@@ -42,10 +42,10 @@ echo -e "${GREEN}[1/6] Updating Cargo.toml version...${NC}"
 sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
 rm Cargo.toml.bak
 
-# Update version in CLI Cargo.toml
-echo -e "${GREEN}[2/6] Updating engine/snps-cli/Cargo.toml version...${NC}"
-sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" engine/snps-cli/Cargo.toml
-rm engine/snps-cli/Cargo.toml.bak
+# Update version in engine workspace Cargo.toml
+echo -e "${GREEN}[2/6] Updating engine/Cargo.toml version...${NC}"
+sed -i.bak "s/^version = \".*\"/version = \"${VERSION}\"/" engine/Cargo.toml
+rm engine/Cargo.toml.bak
 
 # Update version in Tauri config
 echo -e "${GREEN}[3/6] Updating Tauri config version...${NC}"
@@ -71,7 +71,7 @@ fi
 
 # Commit version bump
 echo -e "${GREEN}[5/6] Committing version bump...${NC}"
-git add Cargo.toml engine/snps-cli/Cargo.toml apps/desktop/src-tauri/tauri.conf.json "$RELEASE_NOTES_FILE"
+git add Cargo.toml engine/Cargo.toml apps/desktop/src-tauri/tauri.conf.json "$RELEASE_NOTES_FILE"
 git commit -m "chore: bump version to ${VERSION}"
 
 # Create tag

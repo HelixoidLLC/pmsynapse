@@ -15,6 +15,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use walkdir::WalkDir;
 
 mod daemon;
+mod update_checker;
 
 /// PMSynapse CLI - AI-enabled project management
 #[derive(Parser)]
@@ -153,6 +154,13 @@ enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigCommands,
+    },
+
+    /// Check for updates
+    Update {
+        /// Force check even if checked recently
+        #[arg(long)]
+        force: bool,
     },
 
     /// Manage knowledge matter
@@ -1060,6 +1068,9 @@ fn main() -> anyhow::Result<()> {
     );
     println!();
 
+    // Check for updates in background (non-blocking)
+    update_checker::check_for_updates_background();
+
     match cli.command {
         Commands::Init { force } => cmd_init(force),
         Commands::Status => cmd_status(),
@@ -1085,6 +1096,7 @@ fn main() -> anyhow::Result<()> {
         } => cmd_dev(profile, daemon_only, ui_only, port),
         Commands::Claude { action } => cmd_claude(action),
         Commands::Config { action } => cmd_config(action),
+        Commands::Update { force } => cmd_update(force),
         Commands::Matter { action } => cmd_matter(action),
         Commands::Repo { action } => cmd_repo(action),
         Commands::Knowledge { action } => cmd_knowledge(action),
@@ -4712,6 +4724,55 @@ fn cmd_config(action: ConfigCommands) -> anyhow::Result<()> {
         ConfigCommands::Push { team } => config_push(team),
         ConfigCommands::Init { context, id } => config_init(&context, &id),
     }
+}
+
+fn cmd_update(force: bool) -> anyhow::Result<()> {
+    use update_checker::UpdateChecker;
+
+    println!("{}", "Checking for updates...".bright_blue());
+
+    let checker = UpdateChecker::new()?;
+
+    // If force, clear the cache to bypass the 24h check
+    if force {
+        let cache_path = dirs::cache_dir()
+            .ok_or_else(|| anyhow::anyhow!("Cannot determine cache directory"))?
+            .join("pmsynapse")
+            .join("update_check.json");
+        let _ = std::fs::remove_file(&cache_path); // Ignore error if doesn't exist
+    }
+
+    match checker.check_and_notify() {
+        Ok(Some(message)) => {
+            println!("{}", message);
+        }
+        Ok(None) => {
+            let current_version = env!("CARGO_PKG_VERSION");
+            println!(
+                "{} {} {}",
+                "✓".bright_green(),
+                "You're running the latest version:".bright_green(),
+                format!("v{}", current_version).bright_cyan()
+            );
+        }
+        Err(e) => {
+            let current_version = env!("CARGO_PKG_VERSION");
+            println!(
+                "{} {}",
+                "⚠".bright_yellow(),
+                "Unable to check for updates.".bright_yellow()
+            );
+            println!("  Reason: {}", e);
+            println!(
+                "  Current version: {}",
+                format!("v{}", current_version).bright_cyan()
+            );
+            println!("\n  You can manually check for updates at:");
+            println!("  {}", "https://github.com/HelixoidLLC/pmsynapse/releases".bright_blue());
+        }
+    }
+
+    Ok(())
 }
 
 fn config_show(
