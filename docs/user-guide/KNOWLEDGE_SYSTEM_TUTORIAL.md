@@ -217,6 +217,23 @@ snps know sync --repo <id>        # Only sync specific repo
 snps know status
 ```
 
+### Worktree Inheritance
+
+```bash
+# Inherit configuration from parent repository (worktrees only)
+snps know inherit
+
+# Force inheritance (override existing .pmsynapse directory)
+snps know inherit --force
+```
+
+**How it works**:
+- Detects if current directory is a git worktree
+- Creates symlink from worktree's `.pmsynapse/` to parent's `.pmsynapse/`
+- Automatically runs during worktree creation via `hack/create_worktree.sh`
+- Each worktree maintains independent `knowledge/` directory
+- Shared configuration enables consistent shadow repo setup across worktrees
+
 ### Knowledge Operations
 
 ```bash
@@ -335,6 +352,43 @@ snps know init --user ~/personal --team ~/team  # Same repos!
 # Changes in one project sync to shadow, then to other projects
 ```
 
+### Working with Git Worktrees
+
+Git worktrees allow multiple working directories from the same repository. The knowledge system supports worktrees with automatic configuration inheritance:
+
+```bash
+# Create worktree (automatically inherits configuration)
+./hack/create_worktree.sh feature-branch
+
+# Or create worktree manually, then inherit
+git worktree add ../my-feature feature-branch
+cd ../my-feature
+snps know inherit
+
+# Verify inheritance
+ls -la .pmsynapse  # Should show symlink to parent
+readlink .pmsynapse  # Shows: /path/to/parent/.pmsynapse
+
+# Each worktree has independent knowledge/
+ls knowledge/  # Independent working directory
+
+# Sync works normally in worktree
+snps know sync
+```
+
+**How worktree inheritance works**:
+1. `.pmsynapse/` configuration is shared via symlink (points to parent)
+2. `knowledge/` directory is independent per worktree
+3. Shadow repositories are shared across all worktrees
+4. Changes sync through shadow repos: worktree → shadow → other worktrees
+5. `.git/info/exclude` is automatically managed in the shared git directory
+
+**Benefits**:
+- No need to run `snps know init` in each worktree
+- Consistent shadow repo configuration across worktrees
+- Independent knowledge directories for parallel work
+- Automatic synchronization through shadow repositories
+
 ### Adding Files to Specific Repositories
 
 Manually add files to shadow repos (useful for selective sharing):
@@ -427,15 +481,44 @@ knowledge/
 
 **Worktree Support**:
 
-`snps` automatically detects git worktrees and updates the main repo's `.git/info/exclude`:
+`snps` provides first-class support for git worktrees with automatic configuration inheritance:
 
 ```bash
-# In worktree
-cd ~/work/feature-branch  # git worktree
+# Initialize in main repository
+cd ~/work/main
+snps know init --user ~/personal --team ~/team --project ../knowledge
+
+# Create worktree (automatically inherits configuration)
+./hack/create_worktree.sh feature-branch
+cd ../pmsynapse-worktrees/feature-branch
+
+# Configuration is shared via symlink
+ls -la .pmsynapse  # → /Users/igor/work/main/.pmsynapse
+
+# Knowledge directory is independent
+ls -la knowledge/  # Independent working directory
+
+# Sync works normally
 snps know sync
 
-# Updates: ~/work/main/.git/info/exclude (not worktree-specific)
+# Updates shared .git/info/exclude (not worktree-specific)
+# Located at: ~/work/main/.git/info/exclude
 ```
+
+**Manual worktree setup**:
+```bash
+# If worktree was created without the script
+git worktree add ../my-feature feature-branch
+cd ../my-feature
+snps know inherit  # Inherits parent's .pmsynapse/ via symlink
+snps know sync     # Works immediately with inherited config
+```
+
+**Key points**:
+- `.pmsynapse/` is shared (symlink to parent)
+- `knowledge/` is independent per worktree
+- `.git/info/exclude` is shared across all worktrees
+- Shadow repositories are shared configuration
 
 ### Selective Sync
 
@@ -536,7 +619,32 @@ $ snps know sync
 Error: Knowledge not initialized. Run 'snps know init' first.
 ```
 
-**Solution**: Run `snps know init` to create `.pmsynapse/repositories.yaml`
+**Solution**:
+- In main repository: Run `snps know init` to create `.pmsynapse/repositories.yaml`
+- In worktree: Run `snps know inherit` to link to parent's configuration
+
+### "Not in a worktree" (inherit command)
+
+```bash
+$ snps know inherit
+✗ Not in a worktree
+  This command only works in git worktrees.
+  Run 'snps know init' in the main repository instead.
+```
+
+**Solution**: The `inherit` command only works in git worktrees. Use `snps know init` in the main repository.
+
+### "Parent repository not initialized"
+
+```bash
+$ snps know inherit
+✓ Detected worktree
+✗ Parent repository not initialized
+  Run 'snps know init' in parent repository first:
+  cd /path/to/parent
+```
+
+**Solution**: Initialize knowledge system in the parent repository first, then inherit in worktree.
 
 ### Shadow repo path doesn't exist
 
@@ -643,6 +751,8 @@ For large shadow repos (10k+ files):
 4. `snps know sync --apply` - Push changes back (auto-apply)
 
 **Key commands**:
+- `snps know init` - Initialize knowledge system
+- `snps know inherit` - Inherit configuration in worktree (worktrees only)
 - `snps know sync` - Interactive sync (plan → prompt → apply)
 - `snps know sync --apply` - Non-interactive sync (auto-apply)
 - `snps know sync --dry-run` - Preview changes without applying
