@@ -5,10 +5,15 @@ AI-enabled project management with knowledge graphs and configurable workflows.
 ## Features
 
 - **IDLC Workflows** - Idea Development Lifecycle management per team
+
 - **Knowledge Graph** - Track relationships between issues, research, plans, and code
+
 - **Thoughts System** - Document-based knowledge management with searchable index
+
 - **Claude Integration** - Import and analyze Claude Code sessions
+
 - **Multi-provider LLM** - OpenAI, Anthropic, and local model support
+
 - **Desktop & CLI** - Cross-platform Tauri app + powerful CLI tool
 
 ## Tutorials

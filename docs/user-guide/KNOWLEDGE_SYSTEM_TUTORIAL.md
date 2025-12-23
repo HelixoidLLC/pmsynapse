@@ -136,11 +136,13 @@ When the same file exists in multiple repos:
 
 ### Sync Behavior
 
-**Timestamp-based Sync** (automatic direction):
-- **PULL** (shadow → local): Shadow file is newer
-- **PUSH** (local → shadow): Local file is newer
+**Hash + Timestamp-based Sync** (automatic direction):
+- **SKIP**: Identical content hash (unchanged) - even if timestamps differ
+- **PULL** (shadow → local): Shadow file is newer AND content differs
+- **PUSH** (local → shadow): Local file is newer AND content differs
 - **CONFLICT**: Same timestamp, different content
-- **SKIP**: Identical hash (unchanged)
+
+**Important**: Sync uses content hashes to detect changes, not just timestamps. Running `touch file.md` won't trigger a sync - you must actually modify the file content.
 
 **Sync Plan & Apply**:
 1. **Plan phase**: Scan repos, compare timestamps, build plan
