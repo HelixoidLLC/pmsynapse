@@ -11,6 +11,10 @@ AI-enabled project management with knowledge graphs and configurable workflows.
 - **Multi-provider LLM** - OpenAI, Anthropic, and local model support
 - **Desktop & CLI** - Cross-platform Tauri app + powerful CLI tool
 
+## Tutorials
+
+- **[Knowledge System Tutorial](docs/user-guide/KNOWLEDGE_SYSTEM_TUTORIAL.md)** - Complete guide to `snps know` - unified knowledge management with shadow repositories, bidirectional sync, and multi-level scoping
+
 ## Installation
 
 ### Quick Install
