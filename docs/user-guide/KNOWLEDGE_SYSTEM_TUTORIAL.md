@@ -26,12 +26,19 @@ Knowledge lives in separate git repositories (called "shadow repos") and syncs b
 ### Key Features
 
 ✅ **Three-level scoping** - User, team, and project knowledge repos
+
 ✅ **Bidirectional sync** - Automatic timestamp-based push/pull
+
 ✅ **Conflict detection** - Warns when both local and shadow changed
+
 ✅ **Interactive prompts** - Plan preview with y/N/f confirmation
+
 ✅ **Git integration** - Auto-manages `.git/info/exclude`
+
 ✅ **Worktree support** - Works with `git worktree` setups
+
 ✅ **Smart exclusions** - Configurable patterns (`.git/`, `node_modules/`, `target/`)
+
 ✅ **Verbose mode** - Show/hide skipped files with `--verbose`
 
 ---
